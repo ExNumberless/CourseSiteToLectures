@@ -10,6 +10,10 @@ A URL like https://web.archive.org/web/2019/https://inst.eecs.berkeley.edu/~cs61
 --wayback 2019) reads the course from the Wayback Machine: its own pages and files come from the
 capture nearest that time, and other sites are tried live first, then in the archive. Re-running
 fetch reuses files already downloaded unless force is set.
+
+validate_url (see urlcheck) is called on every URL before it's requested, including redirects.
+Links it refuses are reported and skipped like other failed downloads; if it refuses the course
+page itself, fetch raises BlockedURL.
 """
 
 import re
@@ -24,6 +28,7 @@ from ..extract import CODE_EXTS, DOC_EXTS, short
 from ..model import Lecture
 from . import gslides, manifest
 from .manifest import ManifestProvider
+from .urlcheck import BlockedURL
 from .web import Wayback, Web, archived, nearest, unwrap, url_key
 
 GOOGLE = re.compile(r"^/(presentation|document)/d/([\w-]+)")
@@ -228,11 +233,15 @@ class WebsiteProvider(ManifestProvider):
     def detect(self, source):
         return isinstance(source, str) and source.startswith(("http://", "https://"))
 
-    def fetch(self, plugin, url, dest, wayback=None, force=False, web=None):
+    def fetch(self, plugin, url, dest, wayback=None, force=False, web=None, validate_url=None):
+        """validate_url is passed to the Web client created when web isn't given."""
         timestamp, page_url = unwrap(url)
-        fetcher = Fetcher(web or Web(delay=plugin.fetch_delay), page_url, timestamp or wayback)
+        web = web or Web(delay=plugin.fetch_delay, validate_url=validate_url)
+        fetcher = Fetcher(web, page_url, timestamp or wayback)
         try:
             page = fetcher.get(page_url)
+        except BlockedURL:
+            raise
         except urllib.error.URLError as e:
             hint = "" if fetcher.timestamp else " (for an archived copy, add --wayback with a year such as 2019)"
             raise SystemExit(f"couldn't fetch {page_url}: {getattr(e, 'reason', e)}{hint}") from None
