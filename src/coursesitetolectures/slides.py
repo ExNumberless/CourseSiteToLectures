@@ -1,7 +1,7 @@
 """Slides for the lecture player: one per materials section, from the course materials alone.
 
 render writes <slides dir>/<name>/: a WebP image per PDF page (and per PowerPoint slide, when
-LibreOffice is installed to convert the deck to PDF), and player.json, which lists every slide with
+LibreOffice is installed to convert the deck to PDF), and slides.json, which lists every slide with
 its kind, title, content, and the file and page or slide it came from. Each slide is one of:
 
 - image: a PDF page, scanned or not, or a PowerPoint slide, rendered to <N>.webp
@@ -9,9 +9,10 @@ its kind, title, content, and the file and page or slide it came from. Each slid
   transcribed text), taken from the lecture's materials file
 - code: an example code file
 
-The narration and audio times (narration, start_ms, end_ms) are left null for the assemble step to
-fill in from the lecture transcript and its audio chapters. player.schema.json, next to this
-module, is the JSON Schema for player.json.
+The assemble step reads slides.json and writes player.json, adding the lecture audio and each
+slide's narration and audio times (narration, start_ms, end_ms) from the lecture transcript and its
+audio chapters. slides.schema.json and player.schema.json, next to this module, are their JSON
+Schemas; the player schema extends the slides one.
 """
 
 import json
@@ -27,8 +28,9 @@ from slidestolectures.paths import rel as display
 
 from .extract import CODE_EXTS
 
-SCHEMA = Path(__file__).with_name("player.schema.json")
-VERSION = 1  # player.json's "version"; bump on incompatible changes to the schema
+SLIDES_SCHEMA = Path(__file__).with_name("slides.schema.json")
+PLAYER_SCHEMA = Path(__file__).with_name("player.schema.json")
+VERSION = 1  # slides.json's and player.json's "version"; bump on incompatible changes to the schemas
 DPI = 150  # a US letter page renders to 1275 x 1650, a 10-inch slide to 1500 pixels wide
 WEBP_QUALITY = 80
 SECTION = re.compile(r"^## \[(\d+)\][^\n]*\n?", re.MULTILINE)  # the materials file's section headings
@@ -87,7 +89,7 @@ def slide_markdown(body, title):
 
 
 def render(course, name, out_dir=None, input_dir=None, dpi=DPI, soffice=None):
-    """Write the slide images and player.json for the lecture called name; the player.json path.
+    """Write the slide images and slides.json for the lecture called name; the slides.json path.
 
     course is the course.json that the materials step wrote. out_dir defaults to slides/<name> next
     to it, and input_dir (the course materials) to the directory course.json records. soffice is
@@ -136,7 +138,7 @@ def render(course, name, out_dir=None, input_dir=None, dpi=DPI, soffice=None):
             return {**base, "markdown": slide_markdown(text.get(n, ""), section["title"])}
 
         try:
-            slides = [{**slide(s), "narration": None, "start_ms": None, "end_ms": None} for s in lecture["sections"]]
+            slides = [slide(s) for s in lecture["sections"]]
         finally:
             for doc in docs.values():
                 if doc is not None:
@@ -145,17 +147,16 @@ def render(course, name, out_dir=None, input_dir=None, dpi=DPI, soffice=None):
     for stale in out_dir.glob("*.webp"):
         if stale.name not in images:
             stale.unlink()
-    player = {
+    deck = {
         "version": VERSION,
         "course": index["title"],
         "name": name,
         "title": lecture["title"],
         "number": lecture["number"],
-        "audio": None,
         "slides": slides,
     }
-    path = out_dir / "player.json"
-    path.write_text(json.dumps(player, indent=2, ensure_ascii=False) + "\n")
+    path = out_dir / "slides.json"
+    path.write_text(json.dumps(deck, indent=2, ensure_ascii=False) + "\n")
     kinds = {kind: sum(s["kind"] == kind for s in slides) for kind in ("image", "markdown", "code")}
     print(f"{name}: " + ", ".join(f"{count} {kind}" for kind, count in kinds.items() if count) + f" -> {display(path)}")
     return path

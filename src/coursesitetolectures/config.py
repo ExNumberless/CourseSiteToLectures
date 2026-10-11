@@ -10,7 +10,7 @@
     materials = "out/materials"     # each lecture's source material, as Markdown
     lectures = "out/lectures"       # lecture transcripts
     audio = "out/audio"             # narrated MP3s
-    slides = "out/slides"           # slide images and player.json, a directory per lecture
+    slides = "out/slides"           # slide images, slides.json and player.json per lecture
 
     [settings]                      # plugin attributes, e.g.
     course = "MIT 6.006 Introduction to Algorithms"

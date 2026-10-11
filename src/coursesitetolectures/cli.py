@@ -15,7 +15,7 @@ COMMANDS = {
     "materials": "group course files into lectures and write each lecture's materials as Markdown",
     "lecture": "write a spoken lecture transcript for each lecture's materials with Claude",
     "tts": "narrate each lecture transcript into an MP3 with Speechify",
-    "slides": "render each lecture's slide images and player.json from its materials",
+    "slides": "render each lecture's slide images and slides.json from its materials",
 }
 
 

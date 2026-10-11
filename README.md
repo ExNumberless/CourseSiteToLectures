@@ -40,7 +40,7 @@ Every command takes `--input DIR` (the course materials), `--out DIR` (default `
 | `materials` | Group files into lectures; write each lecture's materials and `course.json` | `--dry-run` lists lectures and files; `--vision` transcribes scanned pages; lecture names or numbers to process only some |
 | `lecture` | Lecture transcript per lecture from its materials | `--model`, `--force` |
 | `tts` | Narrated MP3 per lecture; audio cached per request | `--voice`, `--rps`, `--concurrency`, `--force` |
-| `slides` | Slide images and `player.json` per lecture, from its materials (see [Slides](#slides)) | lecture names or numbers to process only some |
+| `slides` | Slide images and `slides.json` per lecture, from its materials (see [Slides](#slides)) | lecture names or numbers to process only some |
 
 Lecture transcripts are plain Markdown: read and edit them before running `tts`. Re-running `tts` with `--force` only re-synthesizes the parts you changed.
 
@@ -80,21 +80,22 @@ course-site-to-lectures tts --out out/cs61a-su19 out/cs61a-su19/lectures/lecture
 | `markdown` | Everything else: rebuilt Google Slides, HTML, Markdown, notebooks, transcribed text | `markdown`, with math in LaTeX; speaker notes are left out |
 | `code` | Example code files | `code` and a highlighting `language` |
 
-`player.json` lists the slides in order. Its JSON Schema is [`player.schema.json`](src/coursesitetolectures/player.schema.json), shipped in the package. Paths are relative to `player.json`.
+`slides.json` lists the slides in order, with paths relative to it:
 
 ```json
 {
   "version": 1, "course": "CS 61A Summer 2019", "name": "lecture-05", "title": "Higher-Order Functions",
-  "number": 5, "audio": null,
+  "number": 5,
   "slides": [
     {"n": 112, "kind": "image", "title": "Designing Functions", "source": "files/lecture-05/05-Higher-OrderFuncitons.pdf",
-     "locator": "page 1", "image": "112.webp", "width": 1500, "height": 844,
-     "narration": null, "start_ms": null, "end_ms": null}
+     "locator": "page 1", "image": "112.webp", "width": 1500, "height": 844}
   ]
 }
 ```
 
-Every slide has `n` (its section number, counted across the course, as in the transcript's `## [N]` headings and the audio chapters), `kind`, `title`, `source` (the file, relative to the course directory) and `locator` (`"page 3"`, `"slide 2"`, `"section 4"`, `"cell 5"`, or `null` for a whole file). `audio`, `narration`, `start_ms` and `end_ms` stay `null` until they are filled in from the lecture transcript and its MP3.
+Every slide has `n` (its section number, counted across the course, as in the transcript's `## [N]` headings and the audio chapters), `kind`, `title`, `source` (the file, relative to the course directory) and `locator` (`"page 3"`, `"slide 2"`, `"section 4"`, `"cell 5"`, or `null` for a whole file).
+
+`player.json`, the file a player reads, is `slides.json` plus the lecture's `audio` (its MP3, relative to `player.json`) and, on every slide, its `narration` (the transcript's `## [N]` section) and its `start_ms` and `end_ms` in the audio. The JSON Schemas for both ship in the package: [`slides.schema.json`](src/coursesitetolectures/slides.schema.json) and [`player.schema.json`](src/coursesitetolectures/player.schema.json), which extends it.
 
 ## Materials providers
 

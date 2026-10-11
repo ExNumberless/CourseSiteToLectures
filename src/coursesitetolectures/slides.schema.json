@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ExNumberless/CourseSiteToLectures/blob/main/src/coursesitetolectures/slides.schema.json",
+  "title": "slides.json",
+  "description": "One lecture's slides, written by slides.render from the course materials alone. slides.assemble reads it and writes player.json (player.schema.json), which adds the audio and narration. Paths are relative to the slides.json file.",
+  "$ref": "#/$defs/lecture",
+  "properties": {
+    "slides": { "items": { "$ref": "#/$defs/slide", "unevaluatedProperties": false } }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "lecture": {
+      "description": "The lecture fields that slides.json and player.json share. Open, so player.schema.json can extend it; the root schemas close it.",
+      "type": "object",
+      "required": ["version", "course", "name", "title", "number", "slides"],
+      "properties": {
+        "version": { "const": 1, "description": "Schema version, incremented on incompatible changes." },
+        "course": { "type": "string", "description": "The course title, from course.json." },
+        "name": { "type": "string", "description": "The lecture's output name, such as \"lecture-01\"." },
+        "title": { "type": "string", "description": "The lecture's title." },
+        "number": { "type": ["integer", "null"], "description": "The lecture number, or null for an unnumbered lecture." },
+        "slides": { "type": "array", "description": "The slides in order." }
+      }
+    },
+    "slide": {
+      "description": "One slide per materials section. Open, so player.schema.json can extend it; the root schemas close it.",
+      "type": "object",
+      "required": ["n", "kind", "title", "source", "locator"],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The section number, counted across the whole course: the N in the transcript's \"## [N] Title\" heading and the audio chapter \"[N] Title\"."
+        },
+        "kind": { "enum": ["image", "markdown", "code"] },
+        "title": { "type": "string" },
+        "source": { "type": "string", "description": "The file the slide came from, relative to the course materials directory." },
+        "locator": {
+          "type": ["string", "null"],
+          "description": "Where in the source: \"page 3\", \"slide 2\", \"section 4\", \"cell 5\", or null for the whole file."
+        },
+        "image": { "type": "string", "description": "image slides: the WebP image, relative to this file." },
+        "width": { "type": "integer", "minimum": 1, "description": "image slides: the image width in pixels." },
+        "height": { "type": "integer", "minimum": 1, "description": "image slides: the image height in pixels." },
+        "markdown": {
+          "type": "string",
+          "description": "markdown slides: the slide's text as Markdown, with math in LaTeX ($...$ and $$...$$). May be empty."
+        },
+        "code": { "type": "string", "description": "code slides: the file's contents." },
+        "language": {
+          "type": "string",
+          "description": "code slides: a syntax highlighting language name, such as \"python\" or \"scheme\"."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "image" } } },
+          "then": { "required": ["image", "width", "height"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "markdown" } } },
+          "then": { "required": ["markdown"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "code" } } },
+          "then": { "required": ["code", "language"] }
+        }
+      ]
+    }
+  }
+}
