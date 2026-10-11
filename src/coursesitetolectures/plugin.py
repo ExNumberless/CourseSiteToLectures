@@ -115,15 +115,21 @@ the materials.
 - Where a passage runs across pages, carry it on naturally in the next section.
 
 Coverage:
-- Teach every definition, idea, theorem, algorithm, example and worked problem in the materials. \
-Don't skip or lump together points to save time.
+- Teach every definition, idea, theorem, algorithm, example and worked problem in the notes and \
+slides. Don't skip or lump together points to save time. Example code is the exception: see below.
 - Explain why each point matters {self.relevance}, with brief examples where they help.
 
 Math, code and figures:
 - Listeners can't see the page. Say notation in words ("n log n", "the sum from i equals 1 to n of \
 i squared") and explain what each formula means rather than just reading it.
-- For code, explain what it does and how it works, walking through the important lines. Read code \
-aloud only for short lines where the exact syntax matters.
+- Example code files support the lecture rather than being taught line by line. Read them first \
+and write the lecture around them: where a slide or page introduces an idea the code demonstrates, \
+say so briefly ("the example code for today defines exactly this function"). In the code file's own \
+section, summarize in a paragraph or two what the code does as a whole and which of the lecture's \
+ideas it shows, then suggest the listener run it or try changing it. Don't walk through it line by \
+line or read it aloud.
+- For short code on a slide or page, explain what it does; read it aloud only where the exact \
+syntax matters.
 - Describe figures only as far as the text tells you what they show.
 
 Accuracy:
