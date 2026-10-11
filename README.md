@@ -205,12 +205,18 @@ A provider is a subclass of `coursesitetolectures.Provider`:
 
 An online provider can subclass `providers.manifest.ManifestProvider` to read back what it fetched, and use `providers.web.Web` for polite HTTP requests with Wayback Machine support. See [examples/example_provider.py](examples/example_provider.py).
 
+To warn about skipped files, call `report.warn(self.reporter, message)` rather than printing, so programs that call the library get the message through their reporter. `fetch` can also take a `reporter` option.
+
 Use a provider with `--provider my_provider.py[:Class]` or `--provider package.module:Class`, or publish it in a package under the `coursesitetolectures.providers` entry point group, which makes it available by name and tried first in detection:
 
 ```toml
 [project.entry-points."coursesitetolectures.providers"]
 mysite = "my_package.providers:MySiteProvider"
 ```
+
+## Progress and usage
+
+`materials.run`, `vision.run` and `WebsiteProvider.fetch` take an optional `reporter`: any object with the methods of `coursesitetolectures.Reporter` (the same protocol as SlidesToLectures'). It receives `step(name, done, total)` for progress (a call with `done` 0 and the step's name starts each step; after that, `name` is the item just finished), `log(message)` for what the CLI prints, and `usage("anthropic", model, input_tokens=..., output_tokens=..., cache_read_tokens=...)` for each Claude request. A reporter can also have `warn(message)` for what the CLI prints to stderr. The default, `PrintReporter`, prints as the CLI does.
 
 ## Course materials and licenses
 

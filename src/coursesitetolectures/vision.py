@@ -11,9 +11,10 @@ import asyncio
 import re
 
 import pymupdf
-from slidestolectures.vision import CONCURRENCY, render, transcribe
+from slidestolectures.vision import CONCURRENCY, render
 
 from .extract import short
+from .report import PrintReporter
 
 HEADING = re.compile(r"^#+ +(.+)$", re.MULTILINE)
 # Run-in labels such as **Theorem 6.** or <u>Definition</u>. : capitalized, ending in a period inside
@@ -50,25 +51,64 @@ def apply(section, text):
     section.body = re.sub(r"^#{1,2} ", "### ", text, flags=re.MULTILINE)
 
 
-async def _run(plugin, scanned, input_dir, cache_dir, model):
+async def transcribe(client, sem, model, prompt, image, label, reporter):
+    """SlidesToLectures' vision request for one page image, reporting the response's token usage."""
+    async with sem:
+        response = await client.beta.messages.create(
+            model=model,
+            max_tokens=16000,
+            output_config={"effort": "low"},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+    usage = response.usage
+    reporter.usage(
+        "anthropic",
+        response.model or model,
+        input_tokens=usage.input_tokens or 0,
+        output_tokens=usage.output_tokens or 0,
+        cache_read_tokens=usage.cache_read_input_tokens or 0,
+    )
+    if response.stop_reason != "end_turn":
+        raise RuntimeError(f"{label}: stopped with {response.stop_reason}")
+    reporter.log(f"  {label}")
+    return "".join(b.text for b in response.content if b.type == "text").strip()
+
+
+async def _run(plugin, scanned, input_dir, cache_dir, model, reporter):
     import anthropic
 
     sem = asyncio.Semaphore(CONCURRENCY)
     prompt = plugin.vision_prompt()
     docs = {}
+    done = 0
 
     async with anthropic.AsyncAnthropic() as client:
 
         async def page(lecture, n, section):
+            nonlocal done
             cached = cache_path(cache_dir, section)
+            label = f"[{n}] {lecture.name} {section.locator}"
             if not cached.exists():
                 doc = docs.setdefault(section.source, pymupdf.open(input_dir / section.source))
                 image = render(doc[int(section.locator.removeprefix("page ")) - 1])
-                text = await transcribe(client, sem, model, prompt, image, f"[{n}] {lecture.name} {section.locator}")
+                text = await transcribe(client, sem, model, prompt, image, label, reporter)
                 cached.parent.mkdir(parents=True, exist_ok=True)
                 cached.write_text(text + "\n")
             apply(section, cached.read_text().strip())
+            done += 1
+            reporter.step(label, done, len(scanned))
 
+        reporter.step("vision", 0, len(scanned))
         try:
             await asyncio.gather(*(page(*item) for item in scanned))
         finally:
@@ -76,8 +116,13 @@ async def _run(plugin, scanned, input_dir, cache_dir, model):
                 doc.close()
 
 
-def run(plugin, scanned, input_dir, cache_dir, model=None):
-    """Transcribe scanned, a list of (lecture, N, Section), filling in each section."""
+def run(plugin, scanned, input_dir, cache_dir, model=None, reporter=None):
+    """Transcribe scanned, a list of (lecture, N, Section), filling in each section.
+
+    Progress (per page), messages and each request's Claude usage go to reporter (default: print
+    messages).
+    """
+    reporter = reporter or PrintReporter()
     todo = sum(not cache_path(cache_dir, s).exists() for _, _, s in scanned)
-    print(f"{len(scanned)} scanned pages, {todo} to transcribe with Claude")
-    asyncio.run(_run(plugin, scanned, input_dir, cache_dir, model or plugin.vision_model))
+    reporter.log(f"{len(scanned)} scanned pages, {todo} to transcribe with Claude")
+    asyncio.run(_run(plugin, scanned, input_dir, cache_dir, model or plugin.vision_model, reporter))

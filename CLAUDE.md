@@ -22,3 +22,5 @@ library and SlidesToLectures. Its Phase 0 changes here are issues in the
   before starting.
 - `main` is protected: open a PR that closes its issue (`Closes #N`) and passes CI. Addison
   reviews and squash-merges; never merge or enable auto-merge yourself.
+- Start everything you post to GitHub with "[POSTED BY AI AGENT]": PR and issue titles and
+  bodies, comments and reviews, so readers can tell an AI agent wrote it.

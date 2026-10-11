@@ -10,7 +10,6 @@ skipped, or each becomes a lecture of its own with unnumbered = "separate".
 
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from bs4 import BeautifulSoup
 
 from ..extract import short
 from ..model import Lecture
+from ..report import PrintReporter, warn
 from . import Provider
 
 RESOURCE_LINK = re.compile(r"resources/([^/#?]+)/")
@@ -84,8 +84,9 @@ def listed_groups(html, wanted):
     return rows
 
 
-def groups(plugin, input_dir):
+def groups(plugin, input_dir, reporter=None):
     """[(title, [file path relative to input_dir])] for the export's lectures, in order."""
+    reporter = reporter or PrintReporter()
     all_resources = resources(input_dir)
     wanted = {
         rid: meta
@@ -115,7 +116,7 @@ def groups(plugin, input_dir):
         groups += [(None, [path]) for path in unlisted]
     elif unlisted:
         names = ", ".join(p.name for p in unlisted)
-        print(f"{len(unlisted)} file(s) not listed on any page skipped: {names}", file=sys.stderr)
+        warn(reporter, f"{len(unlisted)} file(s) not listed on any page skipped: {names}")
     return groups
 
 
@@ -131,5 +132,5 @@ class OCWProvider(Provider):
     def lectures(self, plugin, input_dir, exclude=()):
         return [
             Lecture(i if title is not None else None, files, title or "")
-            for i, (title, files) in enumerate(groups(plugin, input_dir), 1)
+            for i, (title, files) in enumerate(groups(plugin, input_dir, self.reporter), 1)
         ]
