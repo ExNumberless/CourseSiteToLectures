@@ -121,8 +121,8 @@ def test_config_settings_and_plugin(course_dir, tmp_path, monkeypatch):
     (tmp_path / "my_plugin.py").write_text(
         "from coursesitetolectures import CoursePlugin\n\n"
         "class MyPlugin(CoursePlugin):\n"
-        "    def lecture_title(self, number, files):\n"
-        "        return f'Session {number}' if number else super().lecture_title(number, files)\n"
+        "    def lecture_title(self, number, files, detected):\n"
+        "        return f'Session {number}' if number else super().lecture_title(number, files, detected)\n"
     )
     (tmp_path / "coursesitetolectures.toml").write_text(
         'plugin = "my_plugin.py"\ninput = "course"\n\n[settings]\nunnumbered = "separate"\ncourse = "Algorithms"\n'

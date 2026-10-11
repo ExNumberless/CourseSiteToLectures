@@ -1,0 +1,69 @@
+"""Transcribe scanned pages (page images with no text layer) with Claude.
+
+Each page is rendered to PNG and transcribed with the plugin's vision_prompt, reusing
+SlidesToLectures' vision step. Results are cached per page in <materials dir>/.cache/, so re-runs
+only call the API for pages not yet transcribed; delete a cached file to redo that page.
+
+Needs ANTHROPIC_API_KEY (or another credential the Anthropic SDK can find).
+"""
+
+import asyncio
+import re
+
+import pymupdf
+from slidestolectures.vision import CONCURRENCY, render, transcribe
+
+from .extract import first_line, short
+
+HEADING = re.compile(r"^#+ +(.+)$", re.MULTILINE)
+
+
+def cache_path(cache_dir, section):
+    page = section.locator.removeprefix("page ")
+    return cache_dir / re.sub(r"[^A-Za-z0-9._-]+", "_", section.source) / f"page-{page}.md"
+
+
+def apply(section, text):
+    """Fill in a scanned section's body and title from its transcription.
+
+    The title is the page's first heading, else its first line, without LaTeX dollar signs. Headings
+    in the body are demoted below the "## [N]" section headings.
+    """
+    if m := HEADING.search(text):
+        section.title = short(m.group(1).replace("$", ""))
+    elif line := first_line(text.replace("$", "")):
+        section.title = line
+    section.body = re.sub(r"^#{1,2} ", "### ", text, flags=re.MULTILINE)
+
+
+async def _run(plugin, scanned, input_dir, cache_dir, model):
+    import anthropic
+
+    sem = asyncio.Semaphore(CONCURRENCY)
+    prompt = plugin.vision_prompt()
+    docs = {}
+
+    async with anthropic.AsyncAnthropic() as client:
+
+        async def page(lecture, n, section):
+            cached = cache_path(cache_dir, section)
+            if not cached.exists():
+                doc = docs.setdefault(section.source, pymupdf.open(input_dir / section.source))
+                image = render(doc[int(section.locator.removeprefix("page ")) - 1])
+                text = await transcribe(client, sem, model, prompt, image, f"[{n}] {lecture.name} {section.locator}")
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                cached.write_text(text + "\n")
+            apply(section, cached.read_text().strip())
+
+        try:
+            await asyncio.gather(*(page(*item) for item in scanned))
+        finally:
+            for doc in docs.values():
+                doc.close()
+
+
+def run(plugin, scanned, input_dir, cache_dir, model=None):
+    """Transcribe scanned, a list of (lecture, N, Section), filling in each section."""
+    todo = sum(not cache_path(cache_dir, s).exists() for _, _, s in scanned)
+    print(f"{len(scanned)} scanned pages, {todo} to transcribe with Claude")
+    asyncio.run(_run(plugin, scanned, input_dir, cache_dir, model or plugin.vision_model))

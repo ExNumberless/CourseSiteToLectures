@@ -26,7 +26,7 @@ class OCWPlugin(CoursePlugin):
         # Only the lecture notes and example code; skip recitations, problem sets and site pages.
         return super().include(rel) and rel.suffix.lower() in {".pdf", ".py"} and "_r" not in rel.stem
 
-    def lecture_title(self, number, files):
+    def lecture_title(self, number, files, detected):
         if number in TITLES:
             return f"Lecture {number}: {TITLES[number]}"
-        return super().lecture_title(number, files)
+        return super().lecture_title(number, files, detected)

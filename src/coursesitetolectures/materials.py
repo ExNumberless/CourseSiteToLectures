@@ -14,6 +14,7 @@ from pathlib import Path
 
 from slidestolectures.paths import rel as display
 
+from . import ocw
 from .extract import extract
 
 
@@ -27,7 +28,17 @@ class Lecture:
 
 
 def find_lectures(plugin, input_dir, exclude=()):
-    """The course's lectures in order: numbered ones by number, then unnumbered documents."""
+    """The course's lectures in order: numbered ones by number, then unnumbered documents.
+
+    An MIT OpenCourseWare export is read from its own metadata instead (see ocw.py).
+    """
+    if ocw.is_export(input_dir):
+        groups = ocw.lectures(plugin, input_dir)
+        lectures = [
+            Lecture(i if title is not None else None, files, title or "") for i, (title, files) in enumerate(groups, 1)
+        ]
+        return finish(plugin, lectures, input_dir)
+
     exclude = [p.resolve() for p in exclude]
     numbered, unnumbered, skipped = {}, [], []
     for path in sorted(input_dir.rglob("*")):
@@ -46,10 +57,14 @@ def find_lectures(plugin, input_dir, exclude=()):
             f'{len(skipped)} file(s) with no lecture number skipped (set unnumbered = "separate" to include them)',
             file=sys.stderr,
         )
-    lectures = [numbered[n] for n in sorted(numbered)] + unnumbered
+    return finish(plugin, [numbered[n] for n in sorted(numbered)] + unnumbered, input_dir)
+
+
+def finish(plugin, lectures, input_dir):
+    """Order each lecture's files and name it, with the plugin's hooks."""
     for lecture in lectures:
         lecture.files = plugin.order_files(lecture.files)
-        lecture.title = plugin.lecture_title(lecture.number, lecture.files)
+        lecture.title = plugin.lecture_title(lecture.number, lecture.files, lecture.title or None)
         lecture.name = plugin.output_name(lecture)
     if not lectures:
         raise SystemExit(f"no lecture materials found in {input_dir}")
@@ -84,7 +99,8 @@ def select(lectures, names):
 def markdown(lecture):
     parts = [f"# {lecture.title}"]
     for n, s in lecture.sections:
-        parts.append(f"## [{n}] {s.title}" + (f"\n\n{s.body}" if s.body else ""))
+        body = s.body or ("(Scanned page: run materials with --vision to transcribe it.)" if s.scanned else "")
+        parts.append(f"## [{n}] {s.title}" + (f"\n\n{body}" if body else ""))
     return "\n\n".join(parts) + "\n"
 
 
@@ -115,18 +131,31 @@ def index(lectures, cfg):
     }
 
 
-def run(cfg, names=(), dry_run=False):
-    """Write <materials dir>/<name>.md for the chosen lectures, and course.json for the whole course."""
+def run(cfg, names=(), dry_run=False, vision=False, model=None):
+    """Write <materials dir>/<name>.md for the chosen lectures, and course.json for the whole course.
+
+    With vision, scanned pages in the chosen lectures are transcribed with Claude first.
+    """
     lectures = find_lectures(cfg.plugin, cfg.input, exclude=[cfg.output])
     load(cfg.plugin, lectures, cfg.input)
     chosen = select(lectures, names)
+    scanned = [(lec, n, s) for lec in chosen for n, s in lec.sections if s.scanned]
     if dry_run:
         for lec in chosen:
             first, last = (lec.sections[0][0], lec.sections[-1][0]) if lec.sections else (0, 0)
-            print(f"{lec.name}: {lec.title} [{first}-{last}]")
+            count = sum(s.scanned for _, s in lec.sections)
+            print(f"{lec.name}: {lec.title} [{first}-{last}]" + (f", {count} scanned pages" if count else ""))
             for f in lec.files:
                 print(f"    {f}")
+        if scanned and not vision:
+            print(f"{len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
         return
+    if scanned and vision:
+        from . import vision as vision_step
+
+        vision_step.run(cfg.plugin, scanned, cfg.input, cfg.materials / ".cache", model)
+    elif scanned:
+        print(f"warning: {len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
 
     cfg.materials.mkdir(parents=True, exist_ok=True)
     for lec in chosen:

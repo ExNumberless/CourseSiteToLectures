@@ -31,6 +31,10 @@ def parser():
 
     cmd["materials"].add_argument("lectures", nargs="*", help="only these lectures (name or number)")
     cmd["materials"].add_argument("--dry-run", action="store_true", help="list the lectures and their files only")
+    cmd["materials"].add_argument(
+        "--vision", action="store_true", help="transcribe scanned pages (no text layer) with Claude; cached per page"
+    )
+    cmd["materials"].add_argument("--model", help="Claude model for --vision (default: the plugin's vision_model)")
 
     cmd["lecture"].add_argument(
         "files", nargs="*", type=Path, help="materials Markdown files (default: all in the materials dir)"
@@ -57,7 +61,7 @@ def main(argv=None):
 
         if cfg.input is None:
             raise SystemExit(f"no input directory: pass --input or set input in {config.CONFIG_NAME}")
-        materials.run(cfg, args.lectures, args.dry_run)
+        materials.run(cfg, args.lectures, args.dry_run, args.vision, args.model)
     elif args.command == "lecture":
         from slidestolectures import lecture
 

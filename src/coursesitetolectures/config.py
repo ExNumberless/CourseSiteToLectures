@@ -22,6 +22,7 @@ from pathlib import Path
 
 from slidestolectures.config import load_plugin
 
+from . import ocw
 from .plugin import CoursePlugin
 
 CONFIG_NAME = "coursesitetolectures.toml"
@@ -65,6 +66,8 @@ def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None):
         return value if value is None else (relative_to / Path(value).expanduser())
 
     input_dir = resolve(input_dir, Path.cwd()) or resolve(data.get("input"), base)
+    if plugin.course is None and input_dir is not None and ocw.is_export(input_dir):
+        plugin.course = ocw.course_title(input_dir)
     output = resolve(output_dir, Path.cwd()) or resolve(data.get("output", "out"), base)
     dirs = data.get("output_dirs", {})
     if unknown := set(dirs) - set(OUTPUT_DIRS):

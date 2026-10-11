@@ -26,6 +26,7 @@ class CoursePlugin(Plugin):
     # --- Settings (also settable from [settings] in coursesitetolectures.toml) ---
 
     unnumbered = "skip"  # documents with no lecture number: "skip", or "separate" for a lecture each
+    ocw_types = ("Lecture Notes",)  # OpenCourseWare exports: the resource types to make lectures from
 
     # --- Which files, and which lecture each belongs to ---
 
@@ -42,8 +43,11 @@ class CoursePlugin(Plugin):
                 return int(m.group(1))
         return None
 
-    def lecture_title(self, number, files):
-        """The title of a lecture, given its number (None if unnumbered) and its files."""
+    def lecture_title(self, number, files, detected):
+        """The title of a lecture, given its number (None if unnumbered), its files, and the title found in
+        an OpenCourseWare export's pages (None if none was found)."""
+        if detected:
+            return detected
         if number is None:
             return re.sub(r"[_\-]+", " ", files[0].stem).strip().title()
         return f"Lecture {number}"
@@ -63,6 +67,22 @@ class CoursePlugin(Plugin):
         return not BOILERPLATE.search(section.body)
 
     # --- Prompts ---
+
+    def vision_prompt(self):
+        """The prompt sent with each scanned page image for transcription."""
+        return """\
+Transcribe this scanned page of course notes into Markdown.
+
+- Write all mathematics in LaTeX: $...$ inline and $$...$$ for displayed equations.
+- Keep the page's structure: headings, labels such as "Theorem 3." or "Proof.", numbered \
+equations, and lists. Rejoin lines that only wrapped because of the page width, and words \
+hyphenated across lines.
+- For a figure, write a short description in square brackets, such as [Figure: graph of \
+y = x^2 between -1 and 1], including any labels on it.
+- Leave out running headers and page numbers.
+- Transcribe the words exactly; don't summarize or correct them.
+
+Reply with the Markdown only."""
 
     def lecture_system(self):
         teaching = f"an experienced instructor teaching {self.course}" if self.course else "an experienced instructor"

@@ -28,6 +28,7 @@ class Section:
     body: str  # Markdown
     source: str  # file path relative to the course directory
     locator: str | None = None  # "page 3", "slide 2", "cell 4", or None for the whole file
+    scanned: bool = False  # a page image with no text layer, to transcribe with Claude
 
 
 def short(text, limit=MAX_TITLE):
@@ -72,6 +73,8 @@ def pdf(path, rel):
             text = "\n".join(lines).strip()
             if text:
                 sections.append(Section(first_line(text) or f"{path.name}, page {i}", text, rel, f"page {i}"))
+            elif page.get_images():
+                sections.append(Section(f"{path.name}, page {i}", "", rel, f"page {i}", scanned=True))
     return sections
 
 

@@ -1,6 +1,9 @@
 [tools]
 python = "3.13"
 
+[env]
+_.file = ".env"  # ANTHROPIC_API_KEY and SPEECHIFY_API_KEY; gitignored
+
 [settings]
 python.uv_venv_auto = true
 

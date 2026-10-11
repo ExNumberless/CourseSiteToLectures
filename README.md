@@ -17,7 +17,7 @@ uv tool install "coursesitetolectures[tts]"
 
 or `pip install "coursesitetolectures[tts]"`. Leave off `[tts]` if you don't need audio. Requires Python 3.11+.
 
-- The `lecture` step calls the Claude API: set `ANTHROPIC_API_KEY`.
+- The `lecture` step, and `materials --vision`, call the Claude API: set `ANTHROPIC_API_KEY`.
 - The `tts` step needs `SPEECHIFY_API_KEY` and [ffmpeg](https://ffmpeg.org/) on your `PATH`.
 
 ## Quick start
@@ -33,7 +33,7 @@ Every command takes `--input DIR` (the course materials), `--out DIR` (default `
 
 | Command | What it does | Notable options |
 |---|---|---|
-| `materials` | Group files into lectures; write each lecture's materials and `course.json` | `--dry-run` lists lectures and files; lecture names or numbers to process only some |
+| `materials` | Group files into lectures; write each lecture's materials and `course.json` | `--dry-run` lists lectures and files; `--vision` transcribes scanned pages; lecture names or numbers to process only some |
 | `lecture` | Lecture transcript per lecture from its materials | `--model`, `--force` |
 | `tts` | Narrated MP3 per lecture; audio cached per request | `--voice`, `--rps`, `--concurrency`, `--force` |
 
@@ -51,7 +51,18 @@ Files are grouped by the lecture number in their name, or else in their nearest 
 | Jupyter notebook (`.ipynb`) | Markdown heading cell, with the code cells after it |
 | Code (`.py`, `.java`, `.c`, `.js`, ...) and text (`.txt`) | File |
 
+PDF pages that are scanned images, with no text layer, are transcribed by Claude with `--vision`, with math written in LaTeX. Transcriptions are cached per page in `<materials dir>/.cache/`, so re-runs only transcribe new pages. `--dry-run` reports how many scanned pages each lecture has.
+
 Sections are numbered across the whole course, so numbers stay the same when you process only some lectures. MIT OpenCourseWare's terms-of-use pages are left out.
+
+### MIT OpenCourseWare exports
+
+When the input is an unzipped [OpenCourseWare](https://ocw.mit.edu) course download, lectures come from the export's own metadata instead of file names:
+
+- Files are chosen by their OCW resource type, `Lecture Notes` by default. Set `ocw_types` to use others, such as `["Lecture Notes", "Lecture Slides"]`; a type with no files lists the types the course has.
+- Each table row or list item on the course's pages that links to those files becomes a lecture, in page order, titled from the row: for example `C: The Riemann condition`. Several files linked from one row, such as a session's notes and slides, make one lecture.
+- Files that no row lists, such as a single PDF of the whole set of notes, are skipped, or each becomes a lecture of its own with `unnumbered = "separate"`.
+- `course` defaults to the course number and title, such as `18.014 Calculus with Theory`.
 
 ## Configuration
 
@@ -77,8 +88,9 @@ Settings:
 | `course` | none | What the lectures teach, in the lecture prompt; the course title in `course.json` |
 | `audience` | `"a class"` | Who the lecture is presented to |
 | `relevance` | `"in practice"` | The lecture explains why each point matters *relevance* |
-| `unnumbered` | `"skip"` | Files with no lecture number: `"skip"`, or `"separate"` for a lecture each |
-| `lecture_model` | `claude-opus-5-5` | Claude model |
+| `unnumbered` | `"skip"` | Files with no lecture number (or not listed on an OCW page): `"skip"`, or `"separate"` for a lecture each |
+| `ocw_types` | `["Lecture Notes"]` | OpenCourseWare exports: the resource types to make lectures from |
+| `vision_model`, `lecture_model` | `claude-opus-5-5` | Claude models |
 | `tts_voice` | `henry` | Speechify voice |
 
 ## Plugins
@@ -91,11 +103,11 @@ Use it with `--plugin my_plugin.py`, `--plugin my_plugin.py:MyPlugin`, `--plugin
 |---|---|
 | `include(rel)` | Supported file types, skipping hidden folders |
 | `lecture_number(rel)` | The number after `lec`, `lecture`, `session`, `week`, `class`, `unit` or `L` in the name or nearest folder |
-| `lecture_title(number, files)` | `Lecture N` |
+| `lecture_title(number, files, detected)` | The title from an OCW page, else `Lecture N` |
 | `output_name(lecture)` | `lecture-NN` |
 | `order_files(files)` | Documents, then code, each by path |
 | `keep_section(section)` | Everything but OpenCourseWare terms-of-use pages |
-| `lecture_system()`, `lecture_prompt(title, materials)` | Built from the settings |
+| `vision_prompt()`, `lecture_system()`, `lecture_prompt(title, materials)` | Built from the settings |
 
 ## Course materials and licenses
 
