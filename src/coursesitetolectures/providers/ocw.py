@@ -16,7 +16,9 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from .extract import short
+from ..extract import short
+from ..model import Lecture
+from . import Provider
 
 RESOURCE_LINK = re.compile(r"resources/([^/#?]+)/")
 FILE_NOTE = re.compile(r"\(\s*(?:PDF|ZIP|PY|TXT|MP4|HTML)\b[^)]*\)", re.IGNORECASE)
@@ -82,7 +84,7 @@ def listed_groups(html, wanted):
     return rows
 
 
-def lectures(plugin, input_dir):
+def groups(plugin, input_dir):
     """[(title, [file path relative to input_dir])] for the export's lectures, in order."""
     all_resources = resources(input_dir)
     wanted = {
@@ -115,3 +117,19 @@ def lectures(plugin, input_dir):
         names = ", ".join(p.name for p in unlisted)
         print(f"{len(unlisted)} file(s) not listed on any page skipped: {names}", file=sys.stderr)
     return groups
+
+
+class OCWProvider(Provider):
+    name = "ocw"
+
+    def detect(self, source):
+        return isinstance(source, Path) and is_export(source)
+
+    def course_title(self, input_dir):
+        return course_title(input_dir)
+
+    def lectures(self, plugin, input_dir, exclude=()):
+        return [
+            Lecture(i if title is not None else None, files, title or "")
+            for i, (title, files) in enumerate(groups(plugin, input_dir), 1)
+        ]

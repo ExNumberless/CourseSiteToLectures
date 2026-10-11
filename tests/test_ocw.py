@@ -1,8 +1,9 @@
 import json
 
-from coursesitetolectures import CoursePlugin, cli, ocw, vision
+from coursesitetolectures import CoursePlugin, cli, vision
 from coursesitetolectures.extract import Section
 from coursesitetolectures.materials import find_lectures
+from coursesitetolectures.providers import ocw
 
 
 def test_is_export(ocw_dir, course_dir):

@@ -1,6 +1,8 @@
 """Load coursesitetolectures.toml and the plugin it names.
 
     plugin = "my_plugin:MyPlugin"   # module:Class, path/to/file.py[:Class], or omit for the defaults
+    provider = "website"            # materials provider: a name, module:Class or file.py[:Class];
+                                    # omit to detect it from the input
     input = "course"                # directory of course materials
     output = "out"                  # base directory for everything generated
 
@@ -22,7 +24,7 @@ from pathlib import Path
 
 from slidestolectures.config import load_plugin
 
-from . import ocw
+from . import providers
 from .plugin import CoursePlugin
 
 CONFIG_NAME = "coursesitetolectures.toml"
@@ -32,14 +34,20 @@ OUTPUT_DIRS = {"materials": "materials", "lectures": "lectures", "audio": "audio
 @dataclass
 class Config:
     plugin: CoursePlugin
+    provider_spec: str | None
+    base: Path  # where a provider spec's relative paths are resolved
     input: Path | None
     output: Path
     materials: Path
     lectures: Path
     audio: Path
 
+    def provider(self, source):
+        """The configured provider, else the one detected for source (a local Path or a URL)."""
+        return providers.resolve(self.provider_spec, source, self.base)
 
-def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None):
+
+def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None, provider_spec=None):
     """Read the config file (if any), with command-line values taking precedence."""
     if config_path is None and Path(CONFIG_NAME).exists():
         config_path = Path(CONFIG_NAME)
@@ -49,7 +57,7 @@ def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None):
         with open(config_path, "rb") as f:
             data = tomllib.load(f)
         base = config_path.resolve().parent
-    known = {"plugin", "input", "output", "output_dirs", "settings"}
+    known = {"plugin", "provider", "input", "output", "output_dirs", "settings"}
     if unknown := set(data) - known:
         raise SystemExit(f"{config_path}: unknown key(s) {', '.join(sorted(unknown))}")
 
@@ -66,8 +74,10 @@ def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None):
         return value if value is None else (relative_to / Path(value).expanduser())
 
     input_dir = resolve(input_dir, Path.cwd()) or resolve(data.get("input"), base)
-    if plugin.course is None and input_dir is not None and ocw.is_export(input_dir):
-        plugin.course = ocw.course_title(input_dir)
+    provider_base = base if provider_spec is None else Path.cwd()
+    provider_spec = provider_spec or data.get("provider")
+    if plugin.course is None and input_dir is not None and input_dir.is_dir():
+        plugin.course = providers.resolve(provider_spec, input_dir, provider_base).course_title(input_dir)
     output = resolve(output_dir, Path.cwd()) or resolve(data.get("output", "out"), base)
     dirs = data.get("output_dirs", {})
     if unknown := set(dirs) - set(OUTPUT_DIRS):
@@ -76,4 +86,4 @@ def load(config_path=None, plugin_spec=None, input_dir=None, output_dir=None):
         key: (output / default if output_dir is not None or key not in dirs else resolve(dirs[key], base))
         for key, default in OUTPUT_DIRS.items()
     }
-    return Config(plugin=plugin, input=input_dir, output=output, **paths)
+    return Config(plugin, provider_spec, provider_base, input=input_dir, output=output, **paths)

@@ -8,56 +8,17 @@ section titled "[N] Title", so a player can show the matching page while the aud
 
 import json
 import os
-import sys
-from dataclasses import dataclass, field
-from pathlib import Path
 
 from slidestolectures.paths import rel as display
 
-from . import ocw
+from . import providers
 from .extract import extract
 
 
-@dataclass
-class Lecture:
-    number: int | None
-    files: list[Path] = field(default_factory=list)  # relative to the course directory
-    title: str = ""
-    name: str = ""  # stem for output files, from CoursePlugin.output_name
-    sections: list = field(default_factory=list)  # [(N, Section)]
-
-
-def find_lectures(plugin, input_dir, exclude=()):
-    """The course's lectures in order: numbered ones by number, then unnumbered documents.
-
-    An MIT OpenCourseWare export is read from its own metadata instead (see ocw.py).
-    """
-    if ocw.is_export(input_dir):
-        groups = ocw.lectures(plugin, input_dir)
-        lectures = [
-            Lecture(i if title is not None else None, files, title or "") for i, (title, files) in enumerate(groups, 1)
-        ]
-        return finish(plugin, lectures, input_dir)
-
-    exclude = [p.resolve() for p in exclude]
-    numbered, unnumbered, skipped = {}, [], []
-    for path in sorted(input_dir.rglob("*")):
-        rel = path.relative_to(input_dir)
-        if not path.is_file() or not plugin.include(rel) or any(path.resolve().is_relative_to(e) for e in exclude):
-            continue
-        number = plugin.lecture_number(rel)
-        if number is not None:
-            numbered.setdefault(number, Lecture(number)).files.append(rel)
-        elif plugin.unnumbered == "separate":
-            unnumbered.append(Lecture(None, [rel]))
-        else:
-            skipped.append(rel)
-    if skipped:
-        print(
-            f'{len(skipped)} file(s) with no lecture number skipped (set unnumbered = "separate" to include them)',
-            file=sys.stderr,
-        )
-    return finish(plugin, [numbered[n] for n in sorted(numbered)] + unnumbered, input_dir)
+def find_lectures(plugin, input_dir, exclude=(), provider=None):
+    """The course's lectures in order, from provider (default: the one detected for input_dir)."""
+    provider = provider or providers.detect(input_dir)
+    return finish(plugin, provider.lectures(plugin, input_dir, exclude), input_dir)
 
 
 def finish(plugin, lectures, input_dir):
@@ -122,6 +83,8 @@ def index(lectures, cfg):
                 "materials": path(cfg.materials / f"{lec.name}.md"),
                 "lecture": path(cfg.lectures / f"{lec.name}.md"),
                 "audio": path(cfg.audio / f"{lec.name}.mp3"),
+                "date": lec.date,
+                "links": lec.links,
                 "sections": [
                     {"n": n, "title": s.title, "source": s.source, "locator": s.locator} for n, s in lec.sections
                 ],
@@ -136,7 +99,7 @@ def run(cfg, names=(), dry_run=False, vision=False, model=None):
 
     With vision, scanned pages in the chosen lectures are transcribed with Claude first.
     """
-    lectures = find_lectures(cfg.plugin, cfg.input, exclude=[cfg.output])
+    lectures = find_lectures(cfg.plugin, cfg.input, [cfg.output], cfg.provider(cfg.input))
     load(cfg.plugin, lectures, cfg.input)
     chosen = select(lectures, names)
     scanned = [(lec, n, s) for lec in chosen for n, s in lec.sections if s.scanned]

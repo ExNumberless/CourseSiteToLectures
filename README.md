@@ -1,13 +1,13 @@
 # CourseSiteToLectures
 
-Turn a folder of course materials, such as an [MIT OpenCourseWare](https://ocw.mit.edu) download, into:
+Turn course materials, such as an [MIT OpenCourseWare](https://ocw.mit.edu) download, a folder of notes and slides, or a course website (live or archived on the Wayback Machine), into:
 
 - **Lecture materials**: a Markdown file per lecture, gathering its lecture notes, slides, handouts, notebooks and example code, with one `## [N] Title` section per page, slide, heading or code file.
 - **Lecture transcripts**: a spoken, word-for-word lecture per lecture, written by Claude to teach every section, with math and code explained in words.
 - **Narrated audio**: an MP3 per lecture with a chapter per section, using Speechify text-to-speech.
 - **A course index** (`course.json`): every lecture, its files, and the source file and page or slide for each section number, so a player can show the matching page while the audio plays.
 
-The transcript and audio steps come from [SlidesToLectures](https://github.com/ExNumberless/SlidesToLectures), which does the same for a folder of slideshow PDFs; this package adds course-folder discovery and extraction.
+The transcript and audio steps come from [SlidesToLectures](https://github.com/ExNumberless/SlidesToLectures), which does the same for a folder of slideshow PDFs; this package adds materials providers, which find a course's lectures, and extraction of their files.
 
 ## Install
 
@@ -23,23 +23,46 @@ or `pip install "coursesitetolectures[tts]"`. Leave off `[tts]` if you don't nee
 ## Quick start
 
 ```bash
+course-site-to-lectures fetch https://inst.eecs.berkeley.edu/~cs61a/su19/ --wayback 2019   # only for websites
 course-site-to-lectures materials --input course --dry-run   # check how files were grouped
 course-site-to-lectures materials --input course             # out/materials/ and out/course.json
 course-site-to-lectures lecture                              # out/lectures/
 course-site-to-lectures tts                                  # out/audio/
 ```
 
-Every command takes `--input DIR` (the course materials), `--out DIR` (default `out`), `--plugin` and `--config`. Source files are never modified. Run `course-site-to-lectures <command> --help` for each command's options:
+Every command takes `--input DIR` (the course materials), `--out DIR` (default `out`), `--provider`, `--plugin` and `--config`. Source files are never modified. Run `course-site-to-lectures <command> --help` for each command's options:
 
 | Command | What it does | Notable options |
 |---|---|---|
+| `fetch` | Download a course website's lecture materials into a directory (default `courses/<name>`) | `--wayback TIME`, `--force` |
 | `materials` | Group files into lectures; write each lecture's materials and `course.json` | `--dry-run` lists lectures and files; `--vision` transcribes scanned pages; lecture names or numbers to process only some |
 | `lecture` | Lecture transcript per lecture from its materials | `--model`, `--force` |
 | `tts` | Narrated MP3 per lecture; audio cached per request | `--voice`, `--rps`, `--concurrency`, `--force` |
 
 Lecture transcripts are plain Markdown: read and edit them before running `tts`. Re-running `tts` with `--force` only re-synthesizes the parts you changed.
 
-## How files become lectures
+## Materials providers
+
+A provider knows one kind of course source and how to find its lectures. The built-in providers, in the order they're detected:
+
+| Provider | Source | Lectures |
+|---|---|---|
+| `website` | A course website's URL, used by `fetch` | Rows of the site's schedule table |
+| `manifest` | A directory `fetch` downloaded into (it has a `lectures.json`) | As fetched |
+| `ocw` | An unzipped MIT OpenCourseWare export | The export's own metadata |
+| `folder` | Any other directory | The lecture number in each file's name |
+
+Name one with `--provider` or `provider = ...` in the config to skip detection. See below for writing your own.
+
+### Course websites
+
+`fetch` reads a course's home page and finds the schedule: the first table with a column headed like "Lecture". Each row with links in that column becomes a lecture, and `fetch` downloads what the row links to: PDFs, slides (Google Slides and Docs as PDF), notebooks, code and pages. Videos and other links are recorded in `lectures.json` and `course.json` but not downloaded. Set `site_columns` to take materials from more columns, such as `["lecture", "textbook|reading", "discussion"]`.
+
+Old course sites are often gone or behind a login. Pass `--wayback 2019` (or a `web.archive.org/web/...` URL) to read the course from the [Wayback Machine](https://web.archive.org): the site's own pages and files come from the capture nearest that time, and other sites (such as Google Slides) are tried live first, then in the archive. Files that can't be fetched are reported and skipped.
+
+`fetch` follows each site's robots.txt and waits `fetch_delay` seconds between requests to a site. Re-running it only downloads what's missing, unless you pass `--force`. Then run `materials --input` on the directory, as with any other course.
+
+### Course folders
 
 Files are grouped by the lecture number in their name, or else in their nearest folder: `MIT6_006F11_lec01.pdf`, `Lecture 3 - Graphs.pptx`, `week2/notes.md` and `lecture04/bfs.py` all work. Within a lecture, documents come first, then code. Files with no lecture number are skipped, or each becomes a lecture of its own with `unnumbered = "separate"`.
 
@@ -90,6 +113,8 @@ Settings:
 | `relevance` | `"in practice"` | The lecture explains why each point matters *relevance* |
 | `unnumbered` | `"skip"` | Files with no lecture number (or not listed on an OCW page): `"skip"`, or `"separate"` for a lecture each |
 | `ocw_types` | `["Lecture Notes"]` | OpenCourseWare exports: the resource types to make lectures from |
+| `site_columns` | `["lecture"]` | Course websites: patterns for the schedule columns to take materials from |
+| `fetch_delay` | `1.0` | Course websites: seconds between requests to a site |
 | `vision_model`, `lecture_model` | `claude-opus-5-5` | Claude models |
 | `tts_voice` | `henry` | Speechify voice |
 
@@ -109,9 +134,29 @@ Use it with `--plugin my_plugin.py`, `--plugin my_plugin.py:MyPlugin`, `--plugin
 | `keep_section(section)` | Everything but OpenCourseWare terms-of-use pages |
 | `vision_prompt()`, `lecture_system()`, `lecture_prompt(title, materials)` | Built from the settings |
 
+## Writing a provider
+
+A provider is a subclass of `coursesitetolectures.Provider`:
+
+| Method | Does |
+|---|---|
+| `detect(source)` | Whether it handles `source`: a local directory `Path`, or a URL string for `fetch` |
+| `lectures(plugin, input_dir, exclude)` | The lectures, as `Lecture` objects with files relative to `input_dir` |
+| `fetch(plugin, url, dest, **options)` | Online providers (`online = True`): download a course into `dest` and write `lectures.json` with `providers.manifest.write` |
+| `course_title(input_dir)` | The course's title, when the source knows it |
+
+An online provider can subclass `providers.manifest.ManifestProvider` to read back what it fetched, and use `providers.web.Web` for polite HTTP requests with Wayback Machine support. See [examples/example_provider.py](examples/example_provider.py).
+
+Use a provider with `--provider my_provider.py[:Class]` or `--provider package.module:Class`, or publish it in a package under the `coursesitetolectures.providers` entry point group, which makes it available by name and tried first in detection:
+
+```toml
+[project.entry-points."coursesitetolectures.providers"]
+mysite = "my_package.providers:MySiteProvider"
+```
+
 ## Course materials and licenses
 
-Course materials keep their own licenses. MIT OpenCourseWare, for example, is [CC BY-NC-SA](https://ocw.mit.edu/pages/privacy-and-terms-of-use/): audio you make from it is an adaptation, so share it only non-commercially, with attribution and under the same license.
+Course materials keep their own licenses, and course websites often have no open license at all, so keep what you fetch for your own study. MIT OpenCourseWare, for example, is [CC BY-NC-SA](https://ocw.mit.edu/pages/privacy-and-terms-of-use/): audio you make from it is an adaptation, so share it only non-commercially, with attribution and under the same license.
 
 ## Development
 

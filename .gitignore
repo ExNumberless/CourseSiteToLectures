@@ -16,3 +16,6 @@ mise.local.toml
 # Generated output
 out/
 .DS_Store
+
+# Fetched course materials
+courses/

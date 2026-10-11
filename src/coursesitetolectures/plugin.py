@@ -27,6 +27,10 @@ class CoursePlugin(Plugin):
 
     unnumbered = "skip"  # documents with no lecture number: "skip", or "separate" for a lecture each
     ocw_types = ("Lecture Notes",)  # OpenCourseWare exports: the resource types to make lectures from
+    # Course websites: patterns for the schedule columns to take materials from. The first finds the
+    # schedule table and titles each lecture; add others such as "textbook|reading" for their links too.
+    site_columns = ("lecture",)
+    fetch_delay = 1.0  # seconds between requests to the same site
 
     # --- Which files, and which lecture each belongs to ---
 

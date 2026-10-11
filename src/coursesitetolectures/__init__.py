@@ -3,8 +3,9 @@
 from importlib.metadata import version
 
 from .extract import Section
-from .materials import Lecture
+from .model import Lecture
 from .plugin import CoursePlugin
+from .providers import Provider
 
 __version__ = version("coursesitetolectures")
-__all__ = ["CoursePlugin", "Lecture", "Section", "__version__"]
+__all__ = ["CoursePlugin", "Lecture", "Provider", "Section", "__version__"]

@@ -1,13 +1,17 @@
 """Command-line interface: course-site-to-lectures <command> [options]."""
 
 import argparse
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from slidestolectures.cli import markdown_files
+from slidestolectures.paths import rel as display
 
 from . import __version__, config
 
 COMMANDS = {
+    "fetch": "download a course website (live or from the Wayback Machine) into a directory",
     "materials": "group course files into lectures and write each lecture's materials as Markdown",
     "lecture": "write a spoken lecture transcript for each lecture's materials with Claude",
     "tts": "narrate each lecture transcript into an MP3 with Speechify",
@@ -18,6 +22,7 @@ def parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", type=Path, help=f"config file (default: ./{config.CONFIG_NAME} if present)")
     common.add_argument("--plugin", help="plugin as module:Class or path/to/file.py[:Class]")
+    common.add_argument("--provider", help="materials provider: a name, module:Class or path/to/file.py[:Class]")
     common.add_argument("--input", type=Path, help="directory of course materials")
     common.add_argument("--out", type=Path, help="base directory for generated files (default: out)")
 
@@ -28,6 +33,12 @@ def parser():
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command", required=True, metavar="command")
     cmd = {name: sub.add_parser(name, parents=[common], help=text, description=text) for name, text in COMMANDS.items()}
+
+    cmd["fetch"].add_argument("url", help="the course's home page, or its web.archive.org URL")
+    cmd["fetch"].add_argument(
+        "--wayback", metavar="TIME", help="read the course from the Wayback Machine nearest TIME (YYYY[MMDD...])"
+    )
+    cmd["fetch"].add_argument("--force", action="store_true", help="download files again")
 
     cmd["materials"].add_argument("lectures", nargs="*", help="only these lectures (name or number)")
     cmd["materials"].add_argument("--dry-run", action="store_true", help="list the lectures and their files only")
@@ -52,11 +63,26 @@ def parser():
     return p
 
 
+def course_slug(url):
+    """A directory name for a course URL: ".../~cs61a/su19/" -> "cs61a-su19"."""
+    from .providers.web import unwrap
+
+    parts = [p for p in urlsplit(unwrap(url)[1]).path.split("/") if p and p not in ("index.html", "index.htm")]
+    return re.sub(r"[^A-Za-z0-9]+", "-", "-".join(parts[-2:])).strip("-").lower() or urlsplit(unwrap(url)[1]).netloc
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
-    cfg = config.load(args.config, args.plugin, args.input, args.out)
+    cfg = config.load(args.config, args.plugin, args.input, args.out, args.provider)
 
-    if args.command == "materials":
+    if args.command == "fetch":
+        provider = cfg.provider(args.url)
+        if not provider.online:
+            raise SystemExit(f"the {provider.name} provider reads local directories; pass --input instead")
+        dest = cfg.input or Path("courses") / course_slug(args.url)
+        title = provider.fetch(cfg.plugin, args.url, dest, wayback=args.wayback, force=args.force)
+        print(f"{title} -> {display(dest)}\nNext: course-site-to-lectures materials --input {display(dest)}")
+    elif args.command == "materials":
         from . import materials
 
         if cfg.input is None:
