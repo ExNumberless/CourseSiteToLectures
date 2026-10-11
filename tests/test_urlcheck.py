@@ -92,6 +92,7 @@ def fake_dns(monkeypatch, names):
     "url",
     [
         METADATA_URL,
+        "http://169.254.170.2/v2/credentials",  # ECS task metadata
         "http://[fd00:ec2::254]/latest/meta-data/",
         "http://100.100.100.200/",
         "http://127.0.0.1:8000/",

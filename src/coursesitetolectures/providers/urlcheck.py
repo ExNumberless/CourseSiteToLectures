@@ -62,6 +62,9 @@ def blocked_address(ip):
 def public_only(url):
     """Refuse url unless it's http or https and every address its host resolves to is public.
 
+    Non-public includes cloud metadata services such as 169.254.169.254 (AWS, GCP and Azure
+    instances), 169.254.170.2 (AWS ECS task metadata and credentials) and fd00:ec2::254.
+
     Raises BlockedURL, or URLError if the host can't be resolved.
     """
     parts = urlsplit(url)
