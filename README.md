@@ -19,6 +19,7 @@ or `pip install "coursesitetolectures[tts]"`. Leave off `[tts]` if you don't nee
 
 - The `lecture` step, and `materials --vision`, call the Claude API: set `ANTHROPIC_API_KEY`.
 - The `tts` step needs `SPEECHIFY_API_KEY` and [ffmpeg](https://ffmpeg.org/) on your `PATH`.
+- The `slides` step renders PowerPoint decks as images when [LibreOffice](https://www.libreoffice.org/) (`soffice`) is installed, and shows their text otherwise.
 
 ## Quick start
 
@@ -28,6 +29,7 @@ course-site-to-lectures materials --input course --dry-run   # check how files w
 course-site-to-lectures materials --input course             # out/materials/ and out/course.json
 course-site-to-lectures lecture                              # out/lectures/
 course-site-to-lectures tts                                  # out/audio/
+course-site-to-lectures slides                               # out/slides/
 ```
 
 Every command takes `--input DIR` (the course materials), `--out DIR` (default `out`), `--provider`, `--plugin` and `--config`. Source files are never modified. Run `course-site-to-lectures <command> --help` for each command's options:
@@ -38,6 +40,7 @@ Every command takes `--input DIR` (the course materials), `--out DIR` (default `
 | `materials` | Group files into lectures; write each lecture's materials and `course.json` | `--dry-run` lists lectures and files; `--vision` transcribes scanned pages; lecture names or numbers to process only some |
 | `lecture` | Lecture transcript per lecture from its materials | `--model`, `--force` |
 | `tts` | Narrated MP3 per lecture; audio cached per request | `--voice`, `--rps`, `--concurrency`, `--force` |
+| `slides` | Slide images and `slides.json` per lecture, from its materials (see [Slides](#slides)) | lecture names or numbers to process only some |
 
 Lecture transcripts are plain Markdown: read and edit them before running `tts`. Re-running `tts` with `--force` only re-synthesizes the parts you changed.
 
@@ -66,6 +69,33 @@ course-site-to-lectures tts --out out/cs61a-su19 out/cs61a-su19/lectures/lecture
 ```
 
 `fetch` downloads into `courses/cs61a-su19` and rebuilds the deleted decks from archived copies.
+
+## Slides
+
+`slides` writes `out/slides/<lecture>/`, for a player that shows each page or slide while the lecture audio covers it. It needs only `materials`' output and the course files, so it can run alongside `lecture` and `tts`. Each materials section becomes one slide, of one of three kinds:
+
+| Kind | From | Content |
+|---|---|---|
+| `image` | PDF pages, including scanned ones; PowerPoint slides when LibreOffice is installed | `<N>.webp`, with its `width` and `height` |
+| `markdown` | Everything else: rebuilt Google Slides, HTML, Markdown, notebooks, transcribed text | `markdown`, with math in LaTeX; speaker notes are left out |
+| `code` | Example code files | `code` and a highlighting `language` |
+
+`slides.json` lists the slides in order, with paths relative to it:
+
+```json
+{
+  "version": 1, "course": "CS 61A Summer 2019", "name": "lecture-05", "title": "Higher-Order Functions",
+  "number": 5,
+  "slides": [
+    {"n": 112, "kind": "image", "title": "Designing Functions", "source": "files/lecture-05/05-Higher-OrderFuncitons.pdf",
+     "locator": "page 1", "image": "112.webp", "width": 1500, "height": 844}
+  ]
+}
+```
+
+Every slide has `n` (its section number, counted across the course, as in the transcript's `## [N]` headings and the audio chapters), `kind`, `title`, `source` (the file, relative to the course directory) and `locator` (`"page 3"`, `"slide 2"`, `"section 4"`, `"cell 5"`, or `null` for a whole file).
+
+`player.json`, the file a player reads, is `slides.json` plus the lecture's `audio` (its MP3, relative to `player.json`) and, on every slide, its `narration` (the transcript's `## [N]` section) and its `start_ms` and `end_ms` in the audio. The JSON Schemas for both ship in the package: [`slides.schema.json`](src/coursesitetolectures/slides.schema.json) and [`player.schema.json`](src/coursesitetolectures/player.schema.json), which extends it.
 
 ## Materials providers
 
@@ -125,7 +155,7 @@ input = "6.006"
 output = "out"
 
 [output_dirs]             # optional: put individual outputs elsewhere
-audio = "podcast"
+audio = "podcast"         # also materials, lectures and slides
 
 [settings]                # plugin settings
 course = "MIT 6.006 Introduction to Algorithms"
