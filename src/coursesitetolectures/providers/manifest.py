@@ -21,10 +21,10 @@ File paths are relative to the directory holding lectures.json.
 
 import datetime
 import json
-import sys
 from pathlib import Path
 
 from ..model import Lecture
+from ..report import warn
 from . import Provider
 
 NAME = "lectures.json"
@@ -69,7 +69,7 @@ class ManifestProvider(Provider):
         for item in read(input_dir)["lectures"]:
             files = [Path(f) for f in item.get("files", []) if (input_dir / f).is_file() and plugin.include(Path(f))]
             if not files:
-                print(f"no materials for {item.get('title') or item.get('number')}; skipped", file=sys.stderr)
+                warn(self.reporter, f"no materials for {item.get('title') or item.get('number')}; skipped")
                 continue
             lectures.append(
                 Lecture(item.get("number"), files, item.get("title") or "", links=item.get("links", []),

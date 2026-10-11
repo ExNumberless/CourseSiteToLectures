@@ -21,6 +21,8 @@ import sys
 from importlib.metadata import entry_points
 from pathlib import Path
 
+from ..report import PrintReporter
+
 ENTRY_POINTS = "coursesitetolectures.providers"
 
 
@@ -29,6 +31,7 @@ class Provider:
 
     name = None
     online = False  # whether fetch downloads courses from URLs
+    reporter = PrintReporter()  # where lectures sends warnings (see report.warn); materials sets it
 
     def detect(self, source):
         """Whether this provider handles source: a Path to a local directory, or a URL string."""
