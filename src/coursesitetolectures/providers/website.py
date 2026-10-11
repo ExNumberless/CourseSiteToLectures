@@ -254,6 +254,7 @@ class WebsiteProvider(ManifestProvider):
                         previous[link["url"]] = link["file"]
 
         lectures = schedule_lectures(page_url, *found)
+        reporter.step("fetch", 0, len(lectures))
         for i, lecture in enumerate(lectures, 1):
             folder = Path("files") / f"lecture-{lecture.number:02d}"
             for link in lecture.links:
@@ -279,7 +280,7 @@ class WebsiteProvider(ManifestProvider):
             reporter.log(
                 f"{lecture.number}. {lecture.title}: {len(lecture.files)} file(s), {len(lecture.links)} link(s)"
             )
-            reporter.step("fetch", i, len(lectures))
+            reporter.step(lecture.title, i, len(lectures))
 
         source = url if not wayback or timestamp else archived(wayback, page_url).replace("id_/", "/")
         manifest.write(dest, self.name, title, source, lectures)

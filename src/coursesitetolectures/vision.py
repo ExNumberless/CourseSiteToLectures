@@ -97,17 +97,18 @@ async def _run(plugin, scanned, input_dir, cache_dir, model, reporter):
         async def page(lecture, n, section):
             nonlocal done
             cached = cache_path(cache_dir, section)
+            label = f"[{n}] {lecture.name} {section.locator}"
             if not cached.exists():
                 doc = docs.setdefault(section.source, pymupdf.open(input_dir / section.source))
                 image = render(doc[int(section.locator.removeprefix("page ")) - 1])
-                label = f"[{n}] {lecture.name} {section.locator}"
                 text = await transcribe(client, sem, model, prompt, image, label, reporter)
                 cached.parent.mkdir(parents=True, exist_ok=True)
                 cached.write_text(text + "\n")
             apply(section, cached.read_text().strip())
             done += 1
-            reporter.step("vision", done, len(scanned))
+            reporter.step(label, done, len(scanned))
 
+        reporter.step("vision", 0, len(scanned))
         try:
             await asyncio.gather(*(page(*item) for item in scanned))
         finally:

@@ -28,7 +28,7 @@ def test_materials_reports_instead_of_printing(course_dir, tmp_path, capsys):
     reporter = RecordingReporter()
     materials.run(cfg, reporter=reporter)
     assert capsys.readouterr() == ("", "")
-    assert reporter.steps == [("materials", i, 4) for i in range(1, 5)]
+    assert reporter.steps == [("materials", 0, 4)] + [(f"lecture-0{i}", i, 4) for i in range(1, 5)]
     assert reporter.logs[0].startswith("2 file(s) with no lecture number skipped")
     assert reporter.logs[1].startswith("1 file(s), 2 sections -> ")
     assert reporter.logs[-1].startswith("-> ")
@@ -47,7 +47,7 @@ def test_fetch_reports_instead_of_printing(tmp_path, capsys):
     reporter = RecordingReporter()
     WebsiteProvider().fetch(CoursePlugin(), SITE, tmp_path / "c", web=FakeWeb(site_pages()), reporter=reporter)
     assert capsys.readouterr() == ("", "")
-    assert reporter.steps == [("fetch", 1, 2), ("fetch", 2, 2)]
+    assert reporter.steps == [("fetch", 0, 2), ("Intro", 1, 2), ("Functions", 2, 2)]
     assert "1. Intro: 2 file(s), 3 link(s)" in reporter.logs
     assert any("couldn't fetch https://docs.google.com/presentation/d/GONE/edit" in m for m in reporter.logs)
 
@@ -88,7 +88,7 @@ def test_vision_reports_usage_per_request(ocw_dir, tmp_path, capsys, monkeypatch
     assert reporter.usages == [
         ("anthropic", "claude-test", {"input_tokens": 1500, "output_tokens": 40, "cache_read_tokens": 0})
     ]
-    assert ("vision", 1, 1) in reporter.steps
+    assert reporter.steps[:2] == [("vision", 0, 1), ("[4] lecture-02 page 2", 1, 1)]
     assert "1 scanned pages, 1 to transcribe with Claude" in reporter.logs
     assert "  [4] lecture-02 page 2" in reporter.logs
     assert "## [4] Square roots" in (tmp_path / "out" / "materials" / "lecture-02.md").read_text()

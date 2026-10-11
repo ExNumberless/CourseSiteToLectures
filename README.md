@@ -186,7 +186,7 @@ mysite = "my_package.providers:MySiteProvider"
 
 ## Progress and usage
 
-`materials.run`, `vision.run` and `WebsiteProvider.fetch` take an optional `reporter`: any object with the methods of `coursesitetolectures.Reporter` (the same protocol as SlidesToLectures'). It receives `step(name, done, total)` for progress, `log(message)` for what the CLI prints, and `usage("anthropic", model, input_tokens=..., output_tokens=..., cache_read_tokens=...)` for each Claude request. A reporter can also have `warn(message)` for what the CLI prints to stderr. The default, `PrintReporter`, prints as the CLI does.
+`materials.run`, `vision.run` and `WebsiteProvider.fetch` take an optional `reporter`: any object with the methods of `coursesitetolectures.Reporter` (the same protocol as SlidesToLectures'). It receives `step(name, done, total)` for progress (a call with `done` 0 and the step's name starts each step; after that, `name` is the item just finished), `log(message)` for what the CLI prints, and `usage("anthropic", model, input_tokens=..., output_tokens=..., cache_read_tokens=...)` for each Claude request. A reporter can also have `warn(message)` for what the CLI prints to stderr. The default, `PrintReporter`, prints as the CLI does.
 
 ## Course materials and licenses
 

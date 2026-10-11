@@ -19,7 +19,8 @@ from .report import PrintReporter
 def find_lectures(plugin, input_dir, exclude=(), provider=None, reporter=None):
     """The course's lectures in order, from provider (default: the one detected for input_dir).
 
-    The provider's warnings go to reporter (default: its own, which prints).
+    The provider's warnings go to reporter: when one is given, it is set as provider.reporter on the
+    provider instance passed in (or detected). Otherwise the provider's own reporter, which prints.
     """
     provider = provider or providers.detect(input_dir)
     if reporter is not None:
@@ -129,11 +130,12 @@ def run(cfg, names=(), dry_run=False, vision=False, model=None, reporter=None):
         reporter.log(f"warning: {len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
 
     cfg.materials.mkdir(parents=True, exist_ok=True)
+    reporter.step("materials", 0, len(chosen))
     for i, lec in enumerate(chosen, 1):
         out = cfg.materials / f"{lec.name}.md"
         out.write_text(markdown(lec))
         reporter.log(f"{len(lec.files)} file(s), {len(lec.sections)} sections -> {display(out)}")
-        reporter.step("materials", i, len(chosen))
+        reporter.step(lec.name, i, len(chosen))
     course = cfg.output / "course.json"
     course.write_text(json.dumps(index(lectures, cfg), indent=2) + "\n")
     reporter.log(f"-> {display(course)}")

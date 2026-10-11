@@ -14,9 +14,15 @@ from typing import Protocol
 
 
 class Reporter(Protocol):
-    def step(self, name: str, done: int, total: int) -> None: ...  # progress within a step
+    def step(self, name: str, done: int, total: int) -> None:
+        """Progress within a step: name is the item just finished, done of total.
 
-    def log(self, message: str) -> None: ...  # what print() said
+        A step starts with a call where done is 0 and name is the step's name ("fetch", "materials"
+        or "vision").
+        """
+
+    def log(self, message: str) -> None:
+        """A line of output for the user: what print() said."""
 
     def usage(
         self,
@@ -28,7 +34,8 @@ class Reporter(Protocol):
         cache_read_tokens: int = 0,
         characters: int = 0,
         requests: int = 1,
-    ) -> None: ...
+    ) -> None:
+        """API usage: Claude tokens for each request, or text-to-speech characters."""
 
 
 class PrintReporter:
