@@ -1,9 +1,9 @@
 """Any directory of course files, grouped by the lecture number in each file's name or folder."""
 
-import sys
 from pathlib import Path
 
 from ..model import Lecture
+from ..report import warn
 from . import Provider
 
 
@@ -30,8 +30,8 @@ class FolderProvider(Provider):
             else:
                 skipped.append(rel)
         if skipped:
-            print(
+            warn(
+                self.reporter,
                 f'{len(skipped)} file(s) with no lecture number skipped (set unnumbered = "separate" to include them)',
-                file=sys.stderr,
             )
         return [numbered[n] for n in sorted(numbered)] + unnumbered

@@ -6,6 +6,7 @@ from .extract import Section
 from .model import Lecture
 from .plugin import CoursePlugin
 from .providers import Provider
+from .report import PrintReporter, Reporter
 
 __version__ = version("coursesitetolectures")
-__all__ = ["CoursePlugin", "Lecture", "Provider", "Section", "__version__"]
+__all__ = ["CoursePlugin", "Lecture", "PrintReporter", "Provider", "Reporter", "Section", "__version__"]

@@ -13,11 +13,17 @@ from slidestolectures.paths import rel as display
 
 from . import providers
 from .extract import extract
+from .report import PrintReporter
 
 
-def find_lectures(plugin, input_dir, exclude=(), provider=None):
-    """The course's lectures in order, from provider (default: the one detected for input_dir)."""
+def find_lectures(plugin, input_dir, exclude=(), provider=None, reporter=None):
+    """The course's lectures in order, from provider (default: the one detected for input_dir).
+
+    The provider's warnings go to reporter (default: its own, which prints).
+    """
     provider = provider or providers.detect(input_dir)
+    if reporter is not None:
+        provider.reporter = reporter
     return finish(plugin, provider.lectures(plugin, input_dir, exclude), input_dir)
 
 
@@ -94,12 +100,14 @@ def index(lectures, cfg):
     }
 
 
-def run(cfg, names=(), dry_run=False, vision=False, model=None):
+def run(cfg, names=(), dry_run=False, vision=False, model=None, reporter=None):
     """Write <materials dir>/<name>.md for the chosen lectures, and course.json for the whole course.
 
-    With vision, scanned pages in the chosen lectures are transcribed with Claude first.
+    With vision, scanned pages in the chosen lectures are transcribed with Claude first. Progress,
+    messages and Claude usage go to reporter (default: print messages).
     """
-    lectures = find_lectures(cfg.plugin, cfg.input, [cfg.output], cfg.provider(cfg.input))
+    reporter = reporter or PrintReporter()
+    lectures = find_lectures(cfg.plugin, cfg.input, [cfg.output], cfg.provider(cfg.input), reporter)
     load(cfg.plugin, lectures, cfg.input)
     chosen = select(lectures, names)
     scanned = [(lec, n, s) for lec in chosen for n, s in lec.sections if s.scanned]
@@ -107,24 +115,25 @@ def run(cfg, names=(), dry_run=False, vision=False, model=None):
         for lec in chosen:
             first, last = (lec.sections[0][0], lec.sections[-1][0]) if lec.sections else (0, 0)
             count = sum(s.scanned for _, s in lec.sections)
-            print(f"{lec.name}: {lec.title} [{first}-{last}]" + (f", {count} scanned pages" if count else ""))
+            reporter.log(f"{lec.name}: {lec.title} [{first}-{last}]" + (f", {count} scanned pages" if count else ""))
             for f in lec.files:
-                print(f"    {f}")
+                reporter.log(f"    {f}")
         if scanned and not vision:
-            print(f"{len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
+            reporter.log(f"{len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
         return
     if scanned and vision:
         from . import vision as vision_step
 
-        vision_step.run(cfg.plugin, scanned, cfg.input, cfg.materials / ".cache", model)
+        vision_step.run(cfg.plugin, scanned, cfg.input, cfg.materials / ".cache", model, reporter)
     elif scanned:
-        print(f"warning: {len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
+        reporter.log(f"warning: {len(scanned)} scanned pages have no text: add --vision to transcribe them with Claude")
 
     cfg.materials.mkdir(parents=True, exist_ok=True)
-    for lec in chosen:
+    for i, lec in enumerate(chosen, 1):
         out = cfg.materials / f"{lec.name}.md"
         out.write_text(markdown(lec))
-        print(f"{len(lec.files)} file(s), {len(lec.sections)} sections -> {display(out)}")
+        reporter.log(f"{len(lec.files)} file(s), {len(lec.sections)} sections -> {display(out)}")
+        reporter.step("materials", i, len(chosen))
     course = cfg.output / "course.json"
     course.write_text(json.dumps(index(lectures, cfg), indent=2) + "\n")
-    print(f"-> {display(course)}")
+    reporter.log(f"-> {display(course)}")
