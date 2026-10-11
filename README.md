@@ -58,7 +58,9 @@ Name one with `--provider` or `provider = ...` in the config to skip detection. 
 
 `fetch` reads a course's home page and finds the schedule: the first table with a column headed like "Lecture". Each row with links in that column becomes a lecture, and `fetch` downloads what the row links to: PDFs, slides (Google Slides and Docs as PDF), notebooks, code and pages. Videos and other links are recorded in `lectures.json` and `course.json` but not downloaded. Set `site_columns` to take materials from more columns, such as `["lecture", "textbook|reading", "discussion"]`.
 
-Old course sites are often gone or behind a login. Pass `--wayback 2019` (or a `web.archive.org/web/...` URL) to read the course from the [Wayback Machine](https://web.archive.org): the site's own pages and files come from the capture nearest that time, and other sites (such as Google Slides) are tried live first, then in the archive. Files that can't be fetched are reported and skipped.
+Old course sites are often gone or behind a login. Pass `--wayback 2019` (or a `web.archive.org/web/...` URL) to read the course from the [Wayback Machine](https://web.archive.org): the [CDX API](https://archive.org/developers/wayback-cdx-server.html) lists what was captured, the site's own pages and files come from the capture nearest that time, and other sites are tried live first, then in the archive. Files that can't be fetched are reported and skipped.
+
+Google Slides decks that have since been deleted or made private are recovered from the archive too: an archived PDF export if there is one, or else the slides' text and speaker notes, rebuilt from an archived copy of the deck's editor page into Markdown with a section per slide. No archive.org account or keys are needed.
 
 `fetch` follows each site's robots.txt and waits `fetch_delay` seconds between requests to a site. Re-running it only downloads what's missing, unless you pass `--force`. Then run `materials --input` on the directory, as with any other course.
 

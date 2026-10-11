@@ -4,6 +4,7 @@ Requests identify the tool in their User-Agent, follow each site's robots.txt, w
 requests to the same host, and retry rate limits and server errors with backoff.
 """
 
+import json
 import re
 import time
 import urllib.error
@@ -99,3 +100,57 @@ class Web:
                 refused = isinstance(e.reason, ConnectionRefusedError)
                 time.sleep(REFUSED_WAIT * (attempt + 1) if refused else 2 ** (attempt + 1))
         raise AssertionError("unreachable")
+
+
+def url_key(url):
+    """A URL without scheme or "www.", for matching links to archive captures."""
+    parts = urllib.parse.urlsplit(url)
+    host = parts.netloc.lower().removeprefix("www.")
+    return host + (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+
+
+class Wayback:
+    """The Wayback Machine's CDX API: which captures of a URL (or URL prefix) exist, and when.
+
+    https://archive.org/developers/wayback-cdx-server.html
+    """
+
+    CDX = "https://web.archive.org/cdx/search/cdx"
+
+    def __init__(self, web):
+        self.web = web
+
+    def captures(self, url, prefix=False):
+        """[(timestamp, original URL, mimetype)] of successful captures, or None if the API failed."""
+        query = urllib.parse.urlencode(
+            {
+                "url": url_key(url),
+                "matchType": "prefix" if prefix else "exact",
+                "output": "json",
+                "fl": "timestamp,original,mimetype",
+                "filter": "statuscode:200",
+            }
+        )
+        try:
+            rows = json.loads(self.web.get(f"{self.CDX}?{query}").content or b"[]")
+        except (urllib.error.URLError, ValueError):
+            return None
+        return [tuple(row) for row in rows[1:]]
+
+    def index(self, prefix):
+        """{url_key: [(timestamp, original)]} for everything captured under prefix, or None."""
+        captures = self.captures(prefix, prefix=True)
+        if captures is None:
+            return None
+        found = {}
+        for timestamp, original, _ in captures:
+            found.setdefault(url_key(original), []).append((timestamp, original))
+        return found
+
+
+def nearest(captures, timestamp=None):
+    """captures ordered nearest to timestamp (YYYY[MMDD...]) first, or newest first without one."""
+    if timestamp is None:
+        return sorted(captures, key=lambda c: c[0], reverse=True)
+    target = int(timestamp.ljust(14, "0")[:14])
+    return sorted(captures, key=lambda c: abs(int(c[0][:14].ljust(14, "0")) - target))

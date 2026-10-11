@@ -7,6 +7,7 @@ import pytest
 from bs4 import BeautifulSoup
 
 from coursesitetolectures import CoursePlugin, Provider, cli, providers
+from coursesitetolectures.providers import gslides
 from coursesitetolectures.providers.web import Response, archived, unwrap
 from coursesitetolectures.providers.website import WebsiteProvider, cell_title, classify, table_grid
 
@@ -123,7 +124,7 @@ def test_fetch_writes_files_and_manifest(tmp_path, capsys):
     # A second fetch reuses the downloaded files.
     web.requests.clear()
     WebsiteProvider().fetch(CoursePlugin(), SITE, tmp_path / "c", web=web)
-    assert web.requests == [SITE, "https://docs.google.com/presentation/d/GONE/export/pdf"]
+    assert web.requests == [SITE, "https://docs.google.com/presentation/d/GONE/export/pdf", cdx("GONE")]
 
 
 def test_fetch_more_columns(tmp_path):
@@ -144,13 +145,83 @@ def test_fetch_more_columns(tmp_path):
     ]
 
 
-def test_fetch_from_wayback(tmp_path):
-    web = FakeWeb(site_pages(prefix="https://web.archive.org/web/2019id_/"))
+def cdx(doc_id):
+    return (
+        "https://web.archive.org/cdx/search/cdx?url=docs.google.com%2Fpresentation%2Fd%2F"
+        f"{doc_id}&matchType=prefix&output=json&fl=timestamp%2Coriginal%2Cmimetype&filter=statuscode%3A200"
+    )
+
+
+def cdx_response(rows):
+    return Response("x", json.dumps([["timestamp", "original", "mimetype"], *rows]).encode(), "application/json", None)
+
+
+def test_fetch_from_wayback_uses_nearest_captures(tmp_path, capsys):
+    index = (
+        "https://web.archive.org/cdx/search/cdx?url=inst.eecs.berkeley.edu%2F~cs61a%2Fsu19%2F&matchType=prefix"
+        "&output=json&fl=timestamp%2Coriginal%2Cmimetype&filter=statuscode%3A200"
+    )
+    pages = site_pages() | {
+        index: cdx_response(
+            [
+                ["20190901000000", SITE, "text/html"],
+                ["20220811054946", "http://inst.eecs.berkeley.edu/~cs61a/su19/assets/slides/01.py", "unk"],
+                ["20190801000000", "https://inst.eecs.berkeley.edu/~cs61a/su19/assets/slides/01.py", "unk"],
+            ]
+        ),
+        "https://web.archive.org/web/20190901000000id_/" + SITE: site_pages()[SITE],
+        "https://web.archive.org/web/20190801000000id_/https://inst.eecs.berkeley.edu/~cs61a/su19/assets/slides/01.py": (
+            b"print('hi')\n"
+        ),
+    }
+    web = FakeWeb(pages)
     WebsiteProvider().fetch(CoursePlugin(), SITE, tmp_path / "c", wayback="2019", web=web)
-    assert web.requests[0] == "https://web.archive.org/web/2019id_/" + SITE
     data = json.loads((tmp_path / "c" / "lectures.json").read_text())
     assert data["source"] == "https://web.archive.org/web/2019/" + SITE
-    assert len(data["lectures"][0]["files"]) == 2
+    assert data["lectures"][0]["files"] == ["files/lecture-01/01 - Intro.pdf", "files/lecture-01/01.py"]
+    # 02.py was never archived, so it isn't requested.
+    assert not any("02.py" in u for u in web.requests)
+    assert "couldn't fetch https://inst.eecs.berkeley.edu/~cs61a/su19/assets/slides/02.py: not in the Wayback" in (
+        capsys.readouterr().err
+    )
+
+
+EDITOR_PAGE = (
+    "<html><head><title>Functions - Google Slides</title></head><body><script>DOCS_modelChunk = ["
+    '[12,"s2",0,1,[1,"layout"]],[12,"s1",0,1,[1,"layout"]],'
+    '[3,"t1",108,[1,0,0,1,10,5],[],"s1"],[15,"t1",null,0,"Names"],[15,"t1",null,5," & Functions"],'
+    '[3,"b2",108,[1,0,0,1,10,50],[],"s2"],[15,"b2",null,0,"# a comment\\nx = 1"],'
+    '[3,"t2",108,[1,0,0,1,10,5],[],"s2"],[15,"t2",null,0,"Assignment"],'
+    '[3,"n1",108,[1,0,0,1,0,0],[],"s1:notes"],[15,"n1",null,0,"Welcome back."],'
+    '[3,"n2",108,[1,0,0,1,0,0],[],"s2:notes"]'
+    "]; DOCS_modelChunkLoadStart = 1;</script></body></html>"
+)
+
+
+def test_gslides_rebuilds_slides_in_order():
+    title, slides = gslides.parse(EDITOR_PAGE)
+    assert title == "Functions"
+    assert slides == [("Names & Functions", "", "Welcome back."), ("Assignment", "# a comment\nx = 1", "")]
+    assert gslides.markdown(slides) == (
+        "## Names & Functions\n\nSpeaker notes:\n\nWelcome back.\n\n## Assignment\n\n\\# a comment\nx = 1\n"
+    )
+    assert gslides.parse("<html>no model</html>") is None
+
+
+def test_deleted_slides_rebuilt_from_archive(tmp_path):
+    edit = "https://docs.google.com/presentation/d/GONE/edit"
+    pages = site_pages() | {
+        cdx("GONE"): cdx_response([["20190721044911", edit, "text/html"]]),
+        "https://web.archive.org/web/20190721044911id_/" + edit: Response("x", EDITOR_PAGE.encode(), "text/html", None),
+    }
+    WebsiteProvider().fetch(CoursePlugin(), SITE, tmp_path / "c", web=FakeWeb(pages))
+    functions = json.loads((tmp_path / "c" / "lectures.json").read_text())["lectures"][1]
+    assert functions["files"] == ["files/lecture-02/Functions.md", "files/lecture-02/02.py"]
+    out = tmp_path / "out"
+    cli.main(["materials", "--input", str(tmp_path / "c"), "--out", str(out)])
+    md = (out / "materials" / "lecture-02.md").read_text()
+    assert "## [3] Names & Functions\n\nSpeaker notes:\n\nWelcome back." in md
+    assert "## [4] Assignment\n\n\\# a comment" in md
 
 
 def test_fetch_login_redirect_suggests_wayback(tmp_path):
