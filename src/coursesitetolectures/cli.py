@@ -15,6 +15,7 @@ COMMANDS = {
     "materials": "group course files into lectures and write each lecture's materials as Markdown",
     "lecture": "write a spoken lecture transcript for each lecture's materials with Claude",
     "tts": "narrate each lecture transcript into an MP3 with Speechify",
+    "slides": "render each lecture's slide images and player.json from its materials",
 }
 
 
@@ -60,6 +61,8 @@ def parser():
     cmd["tts"].add_argument("--rps", type=float, help="requests per second (default: 20, the Starter plan; Free: 1)")
     cmd["tts"].add_argument("--concurrency", type=int, help="concurrent requests (default: 15; Free: 3)")
     cmd["tts"].add_argument("--force", action="store_true", help="regenerate existing MP3s")
+
+    cmd["slides"].add_argument("lectures", nargs="*", help="only these lectures (name or number)")
     return p
 
 
@@ -92,6 +95,10 @@ def main(argv=None):
         from slidestolectures import lecture
 
         lecture.run(cfg.plugin, markdown_files(args.files, cfg.materials), cfg.lectures, args.model, args.force)
+    elif args.command == "slides":
+        from . import slides
+
+        slides.run(cfg, args.lectures)
     else:
         try:
             from slidestolectures import tts

@@ -19,6 +19,8 @@ classifiers = [
 ]
 dependencies = [
     "beautifulsoup4>=4.15.0",
+    "pillow>=10.0",
+    "pymupdf>=1.24",
     "python-pptx>=1.0.2",
     "slidestolectures>=0.1.0",
 ]
@@ -35,6 +37,7 @@ Issues = "https://github.com/ExNumberless/CourseSiteToLectures/issues"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4",
     "pytest>=8",
     "ruff>=0.17.0",
 ]

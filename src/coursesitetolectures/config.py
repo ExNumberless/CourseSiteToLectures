@@ -10,6 +10,7 @@
     materials = "out/materials"     # each lecture's source material, as Markdown
     lectures = "out/lectures"       # lecture transcripts
     audio = "out/audio"             # narrated MP3s
+    slides = "out/slides"           # slide images and player.json, a directory per lecture
 
     [settings]                      # plugin attributes, e.g.
     course = "MIT 6.006 Introduction to Algorithms"
@@ -28,7 +29,7 @@ from . import providers
 from .plugin import CoursePlugin
 
 CONFIG_NAME = "coursesitetolectures.toml"
-OUTPUT_DIRS = {"materials": "materials", "lectures": "lectures", "audio": "audio"}
+OUTPUT_DIRS = {"materials": "materials", "lectures": "lectures", "audio": "audio", "slides": "slides"}
 
 
 @dataclass
@@ -41,6 +42,7 @@ class Config:
     materials: Path
     lectures: Path
     audio: Path
+    slides: Path
 
     def provider(self, source):
         """The configured provider, else the one detected for source (a local Path or a URL)."""
