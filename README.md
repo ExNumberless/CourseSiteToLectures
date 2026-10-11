@@ -41,6 +41,32 @@ Every command takes `--input DIR` (the course materials), `--out DIR` (default `
 
 Lecture transcripts are plain Markdown: read and edit them before running `tts`. Re-running `tts` with `--force` only re-synthesizes the parts you changed.
 
+## Examples
+
+The two courses this was tested on. Each run makes a transcript and audio for lecture 1 only, which is cheap to try; leave off the lecture and file arguments to do every lecture.
+
+**MIT 18.014 Calculus with Theory**, an OpenCourseWare export of scanned notes. Download the course from [its OCW page](https://ocw.mit.edu/courses/18-014-calculus-with-theory-fall-2010/), then:
+
+```bash
+unzip 18.014-fall-2010.zip -d 18.014-fall-2010
+course-site-to-lectures materials --input 18.014-fall-2010 --out out/18.014 --vision 1
+course-site-to-lectures lecture --out out/18.014 out/18.014/materials/lecture-01.md
+course-site-to-lectures tts --out out/18.014 out/18.014/lectures/lecture-01.md
+```
+
+The notes are scanned, so `--vision` transcribes their pages with Claude; `1` limits materials to chapter A.
+
+**Berkeley CS 61A Summer 2019**, a course website read from the Wayback Machine, whose Google Slides decks have since been deleted:
+
+```bash
+course-site-to-lectures fetch https://inst.eecs.berkeley.edu/~cs61a/su19/ --wayback 2019
+course-site-to-lectures materials --input courses/cs61a-su19 --out out/cs61a-su19
+course-site-to-lectures lecture --out out/cs61a-su19 out/cs61a-su19/materials/lecture-01.md
+course-site-to-lectures tts --out out/cs61a-su19 out/cs61a-su19/lectures/lecture-01.md
+```
+
+`fetch` downloads into `courses/cs61a-su19` and rebuilds the deleted decks from archived copies.
+
 ## Materials providers
 
 A provider knows one kind of course source and how to find its lectures. The built-in providers, in the order they're detected:
