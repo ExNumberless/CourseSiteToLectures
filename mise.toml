@@ -1,0 +1,25 @@
+[tools]
+python = "3.13"
+
+[settings]
+python.uv_venv_auto = true
+
+[tasks.install]
+description = "Install the package and dev dependencies"
+run = "uv sync --all-extras"
+
+[tasks.test]
+description = "Run the tests"
+run = "uv run pytest"
+
+[tasks.lint]
+description = "Check formatting and lint"
+run = ["uv run ruff format --check .", "uv run ruff check ."]
+
+[tasks.format]
+description = "Format and fix lint"
+run = ["uv run ruff format .", "uv run ruff check --fix ."]
+
+[tasks.build]
+description = "Build the sdist and wheel into dist/"
+run = "uv build"
