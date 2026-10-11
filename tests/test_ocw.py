@@ -63,7 +63,15 @@ def test_vision_uses_cache_and_sets_title(ocw_dir, tmp_path, capsys):
     assert "## [4] Theorem 1\n\n### Theorem 1\n\n$\\sqrt{2}$ is irrational.\n" in md
 
 
-def test_vision_title_from_first_line_without_math():
-    section = Section("x.pdf, page 1", "", "x.pdf", "page 1", scanned=True)
-    vision.apply(section, "$$x^2$$\n\nProof. Suppose $x$ is rational.")
-    assert section.title == "Proof. Suppose x is rational."
+def test_vision_titles():
+    def title(text):
+        section = Section("x.pdf, page 3", "", "x.pdf", "page 3", scanned=True)
+        vision.apply(section, text)
+        return section.title
+
+    assert title("## The $\\epsilon$ test\n\nText.") == "The \\epsilon test"
+    assert title(
+        "proof ends.\n\n**Theorem 6.** *If $a$.*\n\n**Definition.** X. **Theorem 7.** Y.\n\n**Step 1.** Z."
+    ) == ("Theorem 6, Definition, Theorem 7, …")
+    assert title("Then $a^n$ is defined.\n\n<u>Theorem 10</u>. $a^n a^m$.\n\n<u>Proof</u>. Let") == "Theorem 10, Proof"
+    assert title("Use **only** the axioms; then the theorem is proved.") == "Page 3"  # emphasis, not a label

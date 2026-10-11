@@ -18,6 +18,10 @@ from .. import __version__
 USER_AGENT = f"coursesitetolectures/{__version__} (+https://github.com/ExNumberless/CourseSiteToLectures)"
 WAYBACK = re.compile(r"^https?://web\.archive\.org/web/(\d+)[a-z_]*/(.+)$")
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+# Hosts that need more time between requests. The Wayback Machine refuses connections for a while
+# from clients that request faster than about 15 a minute.
+HOST_DELAYS = {"web.archive.org": 4.0}
+REFUSED_WAIT = 60  # seconds, growing with each attempt, after a refused connection
 
 
 @dataclass
@@ -63,7 +67,7 @@ class Web:
         return parser is None or parser.can_fetch(USER_AGENT, url)
 
     def _wait(self, host):
-        pause = self.last.get(host, 0) + self.delay - time.monotonic()
+        pause = self.last.get(host, 0) + max(self.delay, HOST_DELAYS.get(host, 0)) - time.monotonic()
         if pause > 0:
             time.sleep(pause)
         self.last[host] = time.monotonic()
@@ -89,8 +93,9 @@ class Web:
                     raise
                 retry_after = e.headers.get("Retry-After", "")
                 time.sleep(float(retry_after) if retry_after.isdigit() else 2 ** (attempt + 1))
-            except urllib.error.URLError:
+            except urllib.error.URLError as e:
                 if attempt == self.attempts - 1:
                     raise
-                time.sleep(2 ** (attempt + 1))
+                refused = isinstance(e.reason, ConnectionRefusedError)
+                time.sleep(REFUSED_WAIT * (attempt + 1) if refused else 2 ** (attempt + 1))
         raise AssertionError("unreachable")

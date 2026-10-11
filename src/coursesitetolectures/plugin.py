@@ -78,8 +78,8 @@ class CoursePlugin(Plugin):
 Transcribe this scanned page of course notes into Markdown.
 
 - Write all mathematics in LaTeX: $...$ inline and $$...$$ for displayed equations.
-- Keep the page's structure: headings, labels such as "Theorem 3." or "Proof.", numbered \
-equations, and lists. Rejoin lines that only wrapped because of the page width, and words \
+- Keep the page's structure: headings, numbered equations, and lists. Write run-in labels such \
+as "Theorem 3.", "Definition." or "Proof." in bold, even when the page underlines them. Rejoin lines that only wrapped because of the page width, and words \
 hyphenated across lines.
 - For a figure, write a short description in square brackets, such as [Figure: graph of \
 y = x^2 between -1 and 1], including any labels on it.

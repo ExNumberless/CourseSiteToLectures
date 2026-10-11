@@ -13,9 +13,15 @@ import re
 import pymupdf
 from slidestolectures.vision import CONCURRENCY, render, transcribe
 
-from .extract import first_line, short
+from .extract import short
 
 HEADING = re.compile(r"^#+ +(.+)$", re.MULTILINE)
+# Run-in labels such as **Theorem 6.** or <u>Definition</u>. : capitalized, ending in a period inside
+# or just after the markup, at the start of a line or after a sentence.
+LABEL = re.compile(
+    r"(?:^|(?<=[.:]\s))(?:\*\*|<u>)([A-Z][^*<\n]{0,38}?)(?:\.(?:\*\*|</u>)|(?:\*\*|</u>)\.)", re.MULTILINE
+)
+MAX_LABELS = 3
 
 
 def cache_path(cache_dir, section):
@@ -23,16 +29,24 @@ def cache_path(cache_dir, section):
     return cache_dir / re.sub(r"[^A-Za-z0-9._-]+", "_", section.source) / f"page-{page}.md"
 
 
+def plain(text):
+    return " ".join(re.sub(r"[*_$`]|</?u>", "", text).split()).strip(" .:")
+
+
 def apply(section, text):
     """Fill in a scanned section's body and title from its transcription.
 
-    The title is the page's first heading, else its first line, without LaTeX dollar signs. Headings
-    in the body are demoted below the "## [N]" section headings.
+    Pages of notes often start mid-sentence, so the title is the page's first heading, else its bold
+    labels ("Theorem 6, Definition, Theorem 7"), else "Page N". Headings in the body are demoted
+    below the "## [N]" section headings.
     """
+    labels = list(dict.fromkeys(label for m in LABEL.finditer(text) if (label := plain(m.group(1)))))
     if m := HEADING.search(text):
-        section.title = short(m.group(1).replace("$", ""))
-    elif line := first_line(text.replace("$", "")):
-        section.title = line
+        section.title = short(plain(m.group(1)))
+    elif labels:
+        section.title = short(", ".join(labels[:MAX_LABELS]) + (", …" if len(labels) > MAX_LABELS else ""))
+    else:
+        section.title = section.locator.capitalize()
     section.body = re.sub(r"^#{1,2} ", "### ", text, flags=re.MULTILINE)
 
 
