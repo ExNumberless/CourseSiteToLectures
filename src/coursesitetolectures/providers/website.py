@@ -16,7 +16,7 @@ import re
 import sys
 import urllib.error
 from pathlib import Path
-from urllib.parse import unquote, urljoin, urlsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -27,9 +27,10 @@ from .manifest import ManifestProvider
 from .web import Web, archived, unwrap
 
 GOOGLE = re.compile(r"^/(presentation|document)/d/([\w-]+)")
+DRIVE_FILE = re.compile(r"^/file/d/([\w-]+)")
 VIDEO_HOSTS = ("youtube.com", "youtu.be", "vimeo.com", "kaltura.com", "panopto.com")
 VIDEO_EXTS = {".mp4", ".mov", ".webm", ".m4v"}
-SKIP_HOSTS = ("forms.gle", "piazza.com", "gradescope.com", "edstem.org", "okpy.org", "drive.google.com")
+SKIP_HOSTS = ("forms.gle", "piazza.com", "gradescope.com", "edstem.org", "okpy.org")
 LOGIN = re.compile(r"login|/cas/|auth\.|sso\.|shibboleth", re.IGNORECASE)
 
 
@@ -68,7 +69,7 @@ def text(cell):
 def cell_title(cell):
     """A cell's own text, without the text of its links ("Functions slides Video 02.py" -> "Functions")."""
     words = " ".join(s for s in cell.find_all(string=True) if s.find_parent("a") is None)
-    title = " ".join(words.split()).strip(" |,;:-–()[]")
+    title = re.sub(r"\(\s*\)|\[\s*\]", "", " ".join(words.split())).strip(" |,;:-–")
     if not title and (a := cell.find("a")):
         title = text(a)
     return short(title) if title else None
@@ -86,25 +87,39 @@ def find_schedule(soup, columns):
     return None
 
 
+def google_exports(doc_id):
+    """Download URLs to try for a Google Drive ID of unknown type: Slides, Docs, then an uploaded file."""
+    return [
+        f"https://docs.google.com/presentation/d/{doc_id}/export/pdf",
+        f"https://docs.google.com/document/d/{doc_id}/export?format=pdf",
+        f"https://drive.google.com/uc?export=download&id={doc_id}",
+    ]
+
+
 def classify(url):
-    """(kind, download URL or None) for a link: slides, document, file, page, video or link."""
+    """(kind, [download URLs to try]) for a link: slides, document, drive, file, page, video or link."""
     parts = urlsplit(url)
     host, suffix = parts.netloc.lower(), Path(unquote(parts.path)).suffix.lower()
     if host == "docs.google.com" and (m := GOOGLE.match(parts.path)):
         kind, doc_id = m.groups()
-        export = "export/pdf" if kind == "presentation" else "export?format=pdf"
-        return (
-            "slides" if kind == "presentation" else "document"
-        ), f"https://docs.google.com/{kind}/d/{doc_id}/{export}"
+        if kind == "presentation":
+            return "slides", [f"https://docs.google.com/presentation/d/{doc_id}/export/pdf"]
+        return "document", [f"https://docs.google.com/document/d/{doc_id}/export?format=pdf"]
+    if host == "drive.google.com":
+        if m := DRIVE_FILE.match(parts.path):
+            return "drive", google_exports(m.group(1))[2:]
+        if doc_id := parse_qs(parts.query).get("id", [None])[0]:
+            return "drive", google_exports(doc_id)
+        return "link", []  # a folder
     if any(h in host for h in VIDEO_HOSTS) or suffix in VIDEO_EXTS:
-        return "video", None
+        return "video", []
     if parts.scheme not in ("http", "https") or any(h in host for h in SKIP_HOSTS):
-        return "link", None
+        return "link", []
     if suffix in (DOC_EXTS | CODE_EXTS) - {".html", ".htm"}:
-        return "file", url
+        return "file", [url]
     if suffix in ("", ".html", ".htm"):
-        return "page", url
-    return "link", None
+        return "page", [url]
+    return "link", []
 
 
 def file_name(response, url, kind):
@@ -188,23 +203,25 @@ class WebsiteProvider(ManifestProvider):
                             urls.append(link)
                             lecture.links.append({"text": text(a), "url": link})
             for link in lecture.links:
-                kind, download = classify(link["url"])
+                kind, candidates = classify(link["url"])
                 link["kind"] = kind
-                if download is None:
+                if not candidates:
                     continue
                 if link["url"] in previous:
                     link["file"] = previous[link["url"]]
                 else:
-                    try:
-                        response = get(download)
-                    except urllib.error.URLError as e:
-                        print(
-                            f"  {lecture.title}: couldn't fetch {link['url']}: {getattr(e, 'reason', e)}",
-                            file=sys.stderr,
-                        )
-                        continue
-                    if kind != "page" and response.content_type == "text/html":
-                        print(f"  {lecture.title}: {link['url']} is a web page, not a file; skipped", file=sys.stderr)
+                    response, problem = None, None
+                    for download in candidates:
+                        try:
+                            response = get(download)
+                        except urllib.error.URLError as e:
+                            problem = getattr(e, "reason", e)
+                            continue
+                        if kind == "page" or response.content_type != "text/html":
+                            break
+                        response, problem = None, "a web page, not a file"
+                    if response is None:
+                        print(f"  {lecture.title}: couldn't fetch {link['url']}: {problem}", file=sys.stderr)
                         continue
                     path = folder / file_name(response, download, kind)
                     taken = {f for f in lecture.files}

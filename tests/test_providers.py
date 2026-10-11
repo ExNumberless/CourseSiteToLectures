@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 from coursesitetolectures import CoursePlugin, Provider, cli, providers
 from coursesitetolectures.providers.web import Response, archived, unwrap
-from coursesitetolectures.providers.website import WebsiteProvider, classify, table_grid
+from coursesitetolectures.providers.website import WebsiteProvider, cell_title, classify, table_grid
 
 SITE = "https://inst.eecs.berkeley.edu/~cs61a/su19/"
 SCHEDULE = """<html><head><title>CS 61A Summer 2019</title></head><body>
@@ -79,6 +79,8 @@ def test_table_grid_expands_rowspan():
         ("https://youtu.be/xyz", "video"),
         ("https://forms.gle/x", "link"),
         ("https://drive.google.com/drive/folders/x", "link"),
+        ("https://drive.google.com/open?id=CCC", "drive"),
+        ("https://drive.google.com/file/d/DDD/view", "drive"),
         ("https://example.edu/notes/lec1.pdf", "file"),
         ("https://example.edu/code/fib.scm", "file"),
         ("https://example.edu/lab/lab00/", "page"),
@@ -207,3 +209,26 @@ def test_course_slug():
 
 def test_provider_base_is_importable():
     assert issubclass(WebsiteProvider, Provider)
+
+
+def test_drive_link_tries_slides_docs_then_file(tmp_path):
+    assert classify("https://drive.google.com/open?id=CCC")[1][0].endswith("/presentation/d/CCC/export/pdf")
+    page = SCHEDULE.replace(
+        "https://docs.google.com/presentation/d/AAA/edit?usp=sharing", "https://drive.google.com/open?id=CCC"
+    )
+    pages = site_pages() | {
+        SITE: Response(SITE, page.encode(), "text/html", None),
+        # Slides export answers with an HTML error page; the Docs export works.
+        "https://docs.google.com/presentation/d/CCC/export/pdf": Response("x", b"<html>", "text/html", None),
+        "https://docs.google.com/document/d/CCC/export?format=pdf": Response(
+            "x", pdf_bytes("Notes"), "application/pdf", "Intro notes.pdf"
+        ),
+    }
+    WebsiteProvider().fetch(CoursePlugin(), SITE, tmp_path / "c", web=FakeWeb(pages))
+    intro = json.loads((tmp_path / "c" / "lectures.json").read_text())["lectures"][0]
+    assert intro["files"][0] == "files/lecture-01/Intro notes.pdf"
+
+
+def test_cell_title_keeps_parentheses():
+    cell = BeautifulSoup('<td>Special Topics I (Security) <a href="x">slides</a> ( )</td>', "html.parser").td
+    assert cell_title(cell) == "Special Topics I (Security)"
