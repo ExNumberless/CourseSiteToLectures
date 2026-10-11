@@ -172,7 +172,7 @@ With [mise](https://mise.jdx.dev/), `mise run install`, `mise run test`, `mise r
 
 ### Releasing
 
-`slidestolectures` must be on PyPI first. Then remove `[tool.uv.sources]` from `pyproject.toml`, bump `version`, and publish a GitHub release tagged `v<version>`. The Release workflow builds the package and publishes it to PyPI with trusted publishing.
+Bump `version` in `pyproject.toml` and publish a GitHub release tagged `v<version>`. The Release workflow builds the package and publishes it to PyPI with trusted publishing.
 
 ## License
 

@@ -39,10 +39,6 @@ dev = [
     "ruff>=0.17.0",
 ]
 
-# Until slidestolectures is on PyPI. uv drops this table from the built package's metadata.
-[tool.uv.sources]
-slidestolectures = { git = "https://github.com/ExNumberless/SlidesToLectures" }
-
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]
 build-backend = "uv_build"

@@ -102,8 +102,8 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "python-pptx", specifier = ">=1.0.2" },
-    { name = "slidestolectures", git = "https://github.com/ExNumberless/SlidesToLectures" },
-    { name = "slidestolectures", extras = ["tts"], marker = "extra == 'tts'", git = "https://github.com/ExNumberless/SlidesToLectures" },
+    { name = "slidestolectures", specifier = ">=0.1.0" },
+    { name = "slidestolectures", extras = ["tts"], marker = "extra == 'tts'", specifier = ">=0.1.0" },
 ]
 provides-extras = ["tts"]
 
@@ -798,10 +798,14 @@ wheels = [
 [[package]]
 name = "slidestolectures"
 version = "0.1.0"
-source = { git = "https://github.com/ExNumberless/SlidesToLectures#3e1b2f308c806f4777014c4cf576b8964868cfe3" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
     { name = "pymupdf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/96/04/3d57ad5ed39c6c26e1c933095cd93d30a639c5ba6274dd8c0809dfa6ed13/slidestolectures-0.1.0.tar.gz", hash = "sha256:0628b915ce6c944ec5e45846563a87cb20d6696acf719d5e8dabf2b8d9b19723", size = 20761, upload-time = "2026-10-11T19:03:52.247Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/2b/b4541b065fa782e7861cde0758556e17b863207961b228dcd1fdd1cdec3e/slidestolectures-0.1.0-py3-none-any.whl", hash = "sha256:534b2b91825483ed0b62f5e89ed10f8d9b6c3e5ce52eccbdcc20a11b4521ae2c", size = 25397, upload-time = "2026-10-11T19:03:51.129Z" },
 ]
 
 [package.optional-dependencies]
