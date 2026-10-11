@@ -1,7 +1,8 @@
 """A small, polite HTTP client for online providers, with Wayback Machine support.
 
 Requests identify the tool in their User-Agent, follow each site's robots.txt, wait between
-requests to the same host, and retry rate limits and server errors with backoff.
+requests to the same host, and retry rate limits and server errors with backoff. An optional URL
+validator (see urlcheck) is called on every URL before it's requested, including redirect targets.
 """
 
 import json
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from email.message import Message
 
 from .. import __version__
+from .urlcheck import BlockedURL, allow_all
 
 USER_AGENT = f"coursesitetolectures/{__version__} (+https://github.com/ExNumberless/CourseSiteToLectures)"
 WAYBACK = re.compile(r"^https?://web\.archive\.org/web/(\d+)[a-z_]*/(.+)$")
@@ -48,9 +50,28 @@ def archived(timestamp, url):
     return f"https://web.archive.org/web/{timestamp}id_/{url}"
 
 
+class CheckedRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows redirects only to URLs the validator allows."""
+
+    def __init__(self, validate_url):
+        self.validate_url = validate_url
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            self.validate_url(newurl)
+        except urllib.error.URLError:
+            fp.close()
+            raise
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class Web:
-    def __init__(self, delay=1.0, attempts=4, timeout=60):
+    def __init__(self, delay=1.0, attempts=4, timeout=60, validate_url=None):
+        """validate_url(url) is called on every URL before it's requested, including redirect targets,
+        and raises BlockedURL to refuse it (see urlcheck.public_only). By default every URL is allowed."""
         self.delay, self.attempts, self.timeout = delay, attempts, timeout
+        self.validate_url = validate_url or allow_all
+        self.opener = urllib.request.build_opener(CheckedRedirects(self.validate_url))
         self.last = {}  # host -> time of the last request
         self.robots = {}  # origin -> RobotFileParser, or None if robots.txt couldn't be read
 
@@ -74,21 +95,24 @@ class Web:
         self.last[host] = time.monotonic()
 
     def _open(self, url):
+        self.validate_url(url)
         self._wait(urllib.parse.urlsplit(url).netloc)
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=self.timeout) as r:
+        with self.opener.open(request, timeout=self.timeout) as r:
             disposition = Message()
             disposition["Content-Disposition"] = r.headers.get("Content-Disposition", "")
             filename = disposition.get_filename()
             return Response(r.geturl(), r.read(), r.headers.get_content_type(), filename)
 
     def get(self, url):
-        """GET url, raising urllib.error.HTTPError or URLError on failure."""
+        """GET url, raising urllib.error.HTTPError or URLError (BlockedURL if the validator refuses it)."""
         if not self.allowed(url):
             raise urllib.error.URLError(f"disallowed by robots.txt: {url}")
         for attempt in range(self.attempts):
             try:
                 return self._open(url)
+            except BlockedURL:
+                raise
             except urllib.error.HTTPError as e:
                 if e.code not in RETRY_STATUSES or attempt == self.attempts - 1:
                     raise

@@ -91,3 +91,41 @@ def ocw_dir(tmp_path):
     )
     (d / "pages" / "notes" / "data.json").write_text(json.dumps({"uid": "notes-uid", "content": html}))
     return d
+
+
+@pytest.fixture
+def slides_course(tmp_path):
+    """A course with one slide of each kind, after the materials step: (course dir, output dir).
+
+    Lecture 1 is a PDF with a text page and a scanned page (images); lecture 2 a Google Slides deck
+    rebuilt from an archived editor page, an HTML page and example code (markdown and code);
+    lecture 3 a notebook (markdown); lecture 4 a PowerPoint deck (images with LibreOffice, else
+    markdown).
+    """
+    from coursesitetolectures import config, materials
+    from coursesitetolectures.providers import gslides
+
+    d, out = tmp_path / "course", tmp_path / "out"
+    (d / "lecture02").mkdir(parents=True)
+    make_pdf(d / "lec01.pdf", ["Limits\nThe limit of f at a."])
+    with pymupdf.open(d / "lec01.pdf") as doc:
+        pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 8, 8))
+        pixmap.clear_with(200)
+        doc.new_page().insert_image(pymupdf.Rect(0, 0, 100, 100), pixmap=pixmap)
+        doc.saveIncr()
+    deck = [("Recursion", "A function that calls itself.", "Start with factorial."), ("Base cases", "# stop here", "")]
+    (d / "lecture02" / "02 - Recursion.md").write_text(gslides.markdown(deck))
+    (d / "lecture02" / "notes.html").write_text(
+        "<html><head><title>Notes</title></head><body><main><h1>Trees</h1><p>Leaves and roots.</p></main></body></html>"
+    )
+    (d / "lecture02" / "fact.py").write_text("def fact(n):\n    return 1 if n == 0 else n * fact(n - 1)\n")
+    nb = {
+        "cells": [
+            {"cell_type": "markdown", "source": "# Sorting\nInsertion sort, $O(n^2)$."},
+            {"cell_type": "code", "source": "sorted([3, 1, 2])"},
+        ]
+    }
+    (d / "lec03.ipynb").write_text(json.dumps(nb))
+    make_pptx(d / "Lecture 4 - Hashing.pptx", [("Hashing", "Hash tables", "Say hello."), ("Chaining", "Lists", "")])
+    materials.run(config.load(input_dir=d, output_dir=out))
+    return d, out

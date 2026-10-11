@@ -10,10 +10,13 @@ A URL like https://web.archive.org/web/2019/https://inst.eecs.berkeley.edu/~cs61
 --wayback 2019) reads the course from the Wayback Machine: its own pages and files come from the
 capture nearest that time, and other sites are tried live first, then in the archive. Re-running
 fetch reuses files already downloaded unless force is set.
+
+validate_url (see urlcheck) is called on every URL before it's requested, including redirects.
+Links it refuses are reported and skipped like other failed downloads; if it refuses the course
+page itself, fetch raises BlockedURL.
 """
 
 import re
-import sys
 import urllib.error
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit
@@ -22,8 +25,10 @@ from bs4 import BeautifulSoup
 
 from ..extract import CODE_EXTS, DOC_EXTS, short
 from ..model import Lecture
+from ..report import PrintReporter, warn
 from . import gslides, manifest
 from .manifest import ManifestProvider
+from .urlcheck import BlockedURL
 from .web import Wayback, Web, archived, nearest, unwrap, url_key
 
 GOOGLE = re.compile(r"^/(presentation|document)/d/([\w-]+)")
@@ -148,15 +153,15 @@ class Fetcher:
     """Downloads for one course: its own files from the Wayback Machine when reading an archived
     copy (at the capture nearest the timestamp, per the CDX index), other sites live first."""
 
-    def __init__(self, web, page_url, timestamp):
-        self.web, self.timestamp = web, timestamp
+    def __init__(self, web, page_url, timestamp, reporter=None):
+        self.web, self.timestamp, self.reporter = web, timestamp, reporter or PrintReporter()
         self.site = urlsplit(page_url).netloc.lower()
         self.wayback = Wayback(web)
         self.index = None
         if timestamp:
             self.index = self.wayback.index(page_url.rsplit("/", 1)[0] + "/")
             if self.index is None:
-                print("  the Wayback Machine's index is unavailable; trying each file", file=sys.stderr)
+                warn(self.reporter, "  the Wayback Machine's index is unavailable; trying each file")
 
     def archived(self, link):
         if self.index is None:
@@ -216,7 +221,7 @@ class Fetcher:
             if parsed := gslides.parse(html):
                 title, slides = parsed
                 name = re.sub(r'[/\\:*?"<>|]+', "_", title).strip() or doc_id
-                print(f"  rebuilt {len(slides)} slides of {title!r} from the Wayback Machine ({when[:8]})")
+                self.reporter.log(f"  rebuilt {len(slides)} slides of {title!r} from the Wayback Machine ({when[:8]})")
                 return gslides.markdown(slides).encode(), f"{name}.md"
         return None
 
@@ -228,11 +233,18 @@ class WebsiteProvider(ManifestProvider):
     def detect(self, source):
         return isinstance(source, str) and source.startswith(("http://", "https://"))
 
-    def fetch(self, plugin, url, dest, wayback=None, force=False, web=None):
+    def fetch(self, plugin, url, dest, wayback=None, force=False, web=None, reporter=None, validate_url=None):
+        """Download the course at url into dest. Progress (per lecture) and messages go to reporter
+        (default: print messages). validate_url is passed to the Web client created when web isn't
+        given."""
+        reporter = reporter or PrintReporter()
         timestamp, page_url = unwrap(url)
-        fetcher = Fetcher(web or Web(delay=plugin.fetch_delay), page_url, timestamp or wayback)
+        web = web or Web(delay=plugin.fetch_delay, validate_url=validate_url)
+        fetcher = Fetcher(web, page_url, timestamp or wayback, reporter)
         try:
             page = fetcher.get(page_url)
+        except BlockedURL:
+            raise
         except urllib.error.URLError as e:
             hint = "" if fetcher.timestamp else " (for an archived copy, add --wayback with a year such as 2019)"
             raise SystemExit(f"couldn't fetch {page_url}: {getattr(e, 'reason', e)}{hint}") from None
@@ -251,7 +263,8 @@ class WebsiteProvider(ManifestProvider):
                         previous[link["url"]] = link["file"]
 
         lectures = schedule_lectures(page_url, *found)
-        for lecture in lectures:
+        reporter.step("fetch", 0, len(lectures))
+        for i, lecture in enumerate(lectures, 1):
             folder = Path("files") / f"lecture-{lecture.number:02d}"
             for link in lecture.links:
                 kind, candidates = classify(link["url"])
@@ -262,7 +275,7 @@ class WebsiteProvider(ManifestProvider):
                     try:
                         content, name = fetcher.download(link["url"], kind, candidates)
                     except urllib.error.URLError as e:
-                        print(f"  {lecture.title}: couldn't fetch {link['url']}: {e.reason}", file=sys.stderr)
+                        warn(reporter, f"  {lecture.title}: couldn't fetch {link['url']}: {e.reason}")
                         continue
                     path, n = folder / name, 2
                     while path in lecture.files:
@@ -270,10 +283,13 @@ class WebsiteProvider(ManifestProvider):
                     (dest / path).parent.mkdir(parents=True, exist_ok=True)
                     (dest / path).write_bytes(content)
                     previous[link["url"]] = path.as_posix()
-                    print(f"  {path}")
+                    reporter.log(f"  {path}")
                 link["file"] = previous[link["url"]]
                 lecture.files.append(Path(link["file"]))
-            print(f"{lecture.number}. {lecture.title}: {len(lecture.files)} file(s), {len(lecture.links)} link(s)")
+            reporter.log(
+                f"{lecture.number}. {lecture.title}: {len(lecture.files)} file(s), {len(lecture.links)} link(s)"
+            )
+            reporter.step(lecture.title, i, len(lectures))
 
         source = url if not wayback or timestamp else archived(wayback, page_url).replace("id_/", "/")
         manifest.write(dest, self.name, title, source, lectures)

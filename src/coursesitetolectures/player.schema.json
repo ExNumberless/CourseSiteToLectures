@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ExNumberless/CourseSiteToLectures/blob/main/src/coursesitetolectures/player.schema.json",
+  "title": "player.json",
+  "description": "One lecture's slides for a player that shows each slide while its part of the lecture audio plays. Written by slides.assemble: slides.json (slides.schema.json) plus the lecture audio and each slide's narration and audio times. Paths are relative to the player.json file.",
+  "$ref": "slides.schema.json#/$defs/lecture",
+  "required": ["audio"],
+  "properties": {
+    "audio": { "type": "string", "description": "The lecture MP3, relative to player.json." },
+    "slides": { "items": { "$ref": "#/$defs/slide" } }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "slide": {
+      "$ref": "slides.schema.json#/$defs/slide",
+      "required": ["narration", "start_ms", "end_ms"],
+      "properties": {
+        "narration": {
+          "type": "string",
+          "description": "What the lecture says while this slide shows: the transcript's \"## [N]\" section."
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Where the slide's narration starts in the audio, in milliseconds: its audio chapter's start."
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Where the slide's narration ends in the audio, in milliseconds: its audio chapter's end."
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}
